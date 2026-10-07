@@ -233,6 +233,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"ytpick {__version__}")
+        self.set_icon()
         self.geometry("1050x700")
 
         st = load_json(STATE_FILE, {})
@@ -354,6 +355,18 @@ class App(tk.Tk):
         self.refresh_disk()
         if self.show_readme.get():
             self.after(400, self.show_readme_dialog)
+
+    def set_icon(self):
+        assets = Path(__file__).resolve().parent / "assets"
+        ico, png = assets / "icon.ico", assets / "icon.png"
+        try:
+            if sys.platform == "win32" and ico.exists():
+                self.iconbitmap(default=str(ico))
+            elif png.exists():
+                self.app_icon = tk.PhotoImage(file=str(png))
+                self.iconphoto(True, self.app_icon)
+        except tk.TclError:
+            pass
 
     def style_text(self, widget):
         p = self.pal
