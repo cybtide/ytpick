@@ -1,6 +1,13 @@
-# ytpick
+<p align="center">
+  <img src="assets/icon.png" alt="ytpick" width="112">
+</p>
 
-Desktop-Anwendung zum Suchen, Auswählen und Herunterladen von YouTube-Videos in bester Qualität. Grafische Oberfläche für [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+<h1 align="center">ytpick</h1>
+
+<p align="center">
+  Desktop-Anwendung zum Suchen, Auswählen und Herunterladen von YouTube-Videos in bester Qualität.<br>
+  Grafische Oberfläche für <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>.
+</p>
 
 ## Funktionen
 

@@ -83,6 +83,9 @@ try {
     Step "Programm kopieren und Verknuepfungen anlegen"
     New-Item -ItemType Directory -Force -Path $target | Out-Null
     Copy-Item (Join-Path $here $script) (Join-Path $target $script) -Force
+    $assets = Join-Path $here "assets"
+    if (Test-Path $assets) { Copy-Item $assets $target -Recurse -Force }
+    $icon = Join-Path $target "assets\icon.ico"
     $pyw = Join-Path (Split-Path $py) "pythonw.exe"
     if (-not (Test-Path $pyw)) { $pyw = $py }
     $ws = New-Object -ComObject WScript.Shell
@@ -95,6 +98,7 @@ try {
         $lnk.TargetPath = $pyw
         $lnk.Arguments = '"' + (Join-Path $target $script) + '"'
         $lnk.WorkingDirectory = $target
+        if (Test-Path $icon) { $lnk.IconLocation = $icon }
         $lnk.Save()
     }
     Ok "Installiert nach $target"
