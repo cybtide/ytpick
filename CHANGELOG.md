@@ -8,6 +8,10 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 ### Hinzugefügt
 
 - Programmsymbol für Fenster, Windows-Verknüpfung und README
+- Einstellungsdialog zum Ein- und Ausblenden sowie Umsortieren der Spalten
+- Spalte „Status“ mit Hinweis auf verifizierte Kanäle, sofern YouTube die Angabe liefert
+- Merken von Videos: gemerkte Videos stehen oben und bleiben bei neuen Suchen erhalten
+- Prüfung nach dem Download, dass die fertige Datei zur gewählten Video-ID passt
 
 ## [0.1.0] - 2026-10-08
 

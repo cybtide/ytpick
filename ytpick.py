@@ -64,13 +64,24 @@ DATE_WORKERS = 2
 BROWSERS = ["keine", "firefox", "chrome", "edge", "brave", "vivaldi", "opera", "safari"]
 
 COLUMNS = [
+    ("pin", "★", 34, "center"),
     ("rank", "#", 40, "e"),
     ("titel", "Titel", 410, "w"),
     ("kanal", "Kanal", 150, "w"),
+    ("verif", "Status", 90, "w"),
     ("datum", "Upload", 90, "w"),
     ("dauer", "Dauer", 65, "e"),
     ("aufrufe", "Aufrufe", 100, "e"),
 ]
+
+COLUMN_KEYS = [c[0] for c in COLUMNS]
+COLUMN_LABELS = {
+    "pin": "Merken (★)", "rank": "Rang (#)", "titel": "Titel", "kanal": "Kanal",
+    "verif": "Kanal-Status (verifiziert)", "datum": "Upload-Datum", "dauer": "Dauer",
+    "aufrufe": "Aufrufe",
+}
+LOCKED_COLUMNS = {"titel"}
+DEFAULT_VISIBLE = ["pin", "rank", "titel", "kanal", "datum", "dauer", "aufrufe"]
 
 DARK = {"bg": "#1e1f22", "panel": "#2b2d31", "field": "#25272b", "header": "#313338",
         "fg": "#e3e5e8", "muted": "#9aa0a6", "sel": "#2f5fa8", "accent": "#4c8dff",
@@ -93,6 +104,11 @@ HELP_TEXT = [
           "   Doppelklick oder \"Auswahl herunterladen\". MKV = beste Qualität, MP4 = kompatibler, "
           "Audio = nur Ton.\n"
           "   Geladene Videos erscheinen grau mit ✓."),
+    ("p", "Merken und Einstellungen\n"
+          "   Leertaste oder Klick auf ☆ merkt ein Video. Gemerkte Videos stehen oben und bleiben bei jeder "
+          "neuen Suche erhalten.\n"
+          "   Unter \"Einstellungen\" wählst du Spalten aus und legst ihre Reihenfolge fest. "
+          "Die Spalte Status zeigt ein Häkchen bei von YouTube verifizierten Kanälen."),
     ("p", "4. Blockliste\n"
           "   Zeigt geblockte Kanäle und ausgeblendete Videos mit Zeitpunkt, Entsperren und Log."),
     ("p", "5. Bot-Check von YouTube?\n"
@@ -226,7 +242,23 @@ def normalize(e, info):
         "duration": e.get("duration"),
         "views": e.get("view_count"),
         "date": e.get("upload_date") or None,
+        "verified": e.get("channel_is_verified", info.get("channel_is_verified")),
     }
+
+
+def verify_download(info, vid, outdir):
+    if not info:
+        return False, "keine Antwort von yt-dlp", ""
+    if info.get("id") != vid:
+        return False, f"falsche Video-ID ({info.get('id')} statt {vid})", ""
+    paths = [d.get("filepath") for d in info.get("requested_downloads") or [] if d.get("filepath")]
+    if not paths and info.get("filepath"):
+        paths = [info["filepath"]]
+    for p in paths:
+        f = Path(p)
+        if f.is_file() and f.stat().st_size > 0 and f"[{vid}]" in f.name and outdir.resolve() in f.resolve().parents:
+            return True, "", str(f)
+    return False, "fertige Datei nicht gefunden oder leer", ""
 
 
 class App(tk.Tk):
@@ -243,7 +275,13 @@ class App(tk.Tk):
         self.hidden = hidden
         self.blocked = st.get("blocked_channels", {})
         self.history = set(st.get("downloaded", []))
+        self.pinned = st.get("pinned", {})
         s = st.get("settings", {})
+        order = [k for k in s.get("col_order", []) if k in COLUMN_KEYS]
+        self.col_order = order + [k for k in COLUMN_KEYS if k not in order]
+        vis = s.get("col_visible", DEFAULT_VISIBLE)
+        self.col_visible = {k for k in vis if k in COLUMN_KEYS} | LOCKED_COLUMNS
+        self.set_win = None
 
         cache = load_json(CACHE_FILE, {})
         self.cache = {"searches": cache.get("searches", {}), "dates": cache.get("dates", {})}
@@ -293,8 +331,10 @@ class App(tk.Tk):
                         command=self.render).pack(side="left")
         ttk.Checkbutton(filt, text="Bereits geladene ausblenden", variable=self.hide_downloaded,
                         command=self.render).pack(side="left", padx=12)
-        ttk.Button(filt, text="Blockliste…", command=self.open_blocklist).pack(side="right")
-        ttk.Button(filt, text="Kanal blockieren", command=self.block_channels).pack(side="right", padx=6)
+        ttk.Button(filt, text="Einstellungen…", command=self.open_settings).pack(side="right")
+        ttk.Button(filt, text="Blockliste…", command=self.open_blocklist).pack(side="right", padx=6)
+        ttk.Button(filt, text="Kanal blockieren", command=self.block_channels).pack(side="right")
+        ttk.Button(filt, text="Merken (Leertaste)", command=self.toggle_pin).pack(side="right", padx=6)
         ttk.Button(filt, text="Video ausblenden/einblenden (Entf)",
                    command=self.toggle_hide).pack(side="right")
 
@@ -305,16 +345,20 @@ class App(tk.Tk):
         for key, text, width, anchor in COLUMNS:
             self.tree.heading(key, text=text, command=lambda k=key: self.sort_by(k))
             self.tree.column(key, width=width, anchor=anchor, stretch=(key == "titel"))
+        self.apply_columns()
         sb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         self.tree.bind("<Double-1>", lambda e: self.do_download())
         self.tree.bind("<Delete>", lambda e: self.toggle_hide())
+        self.tree.bind("<space>", lambda e: self.toggle_pin() or "break")
+        self.tree.bind("<Button-1>", self.on_click, add="+")
         self.tree.bind("<Button-3>", self.on_context)
         self.tree.bind("<Button-2>", self.on_context)
         self.ctx = tk.Menu(self, tearoff=0)
         self.ctx.add_command(label="Herunterladen", command=self.do_download)
+        self.ctx.add_command(label="Merken/Merkung aufheben", command=self.toggle_pin)
         self.ctx.add_command(label="Mehr von diesem Kanal", command=self.more_from_channel)
         self.ctx.add_separator()
         self.ctx.add_command(label="Video ausblenden/einblenden", command=self.toggle_hide)
@@ -353,6 +397,9 @@ class App(tk.Tk):
             threading.Thread(target=self._date_worker, daemon=True).start()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.refresh_disk()
+        if self.pinned:
+            self.token += 1
+            self._show([], self.token, "Gemerkte Videos")
         if self.show_readme.get():
             self.after(400, self.show_readme_dialog)
 
@@ -431,6 +478,9 @@ class App(tk.Tk):
             self.theme_window(self.bl_win)
             if self.bl_log:
                 self.style_text(self.bl_log)
+        if self.set_win and self.set_win.winfo_exists():
+            self.theme_window(self.set_win)
+            self.style_text(self.set_list)
         if self.readme_win and self.readme_win.winfo_exists():
             self.theme_window(self.readme_win)
             if self.readme_text:
@@ -491,7 +541,10 @@ class App(tk.Tk):
             "hidden": self.hidden,
             "blocked_channels": self.blocked,
             "downloaded": sorted(self.history),
+            "pinned": self.pinned,
             "settings": {
+                "col_order": self.col_order,
+                "col_visible": [k for k in self.col_order if k in self.col_visible],
                 "outdir": self.outdir.get(),
                 "mode": self.mode.get(),
                 "cookies": self.cookies.get(),
@@ -564,6 +617,120 @@ class App(tk.Tk):
                 it["queued"] = False
         self.render()
 
+    def apply_columns(self):
+        show = [k for k in self.col_order if k in self.col_visible]
+        self.tree.configure(displaycolumns=show)
+
+    def open_settings(self):
+        if self.set_win and self.set_win.winfo_exists():
+            self.set_win.lift()
+            return
+        win = tk.Toplevel(self)
+        win.title("Einstellungen")
+        win.geometry("420x440")
+        win.transient(self)
+        self.set_win = win
+        self.set_order = list(self.col_order)
+        self.set_vis = set(self.col_visible)
+
+        ttk.Label(win, text="Angezeigte Spalten und Reihenfolge", padding=(12, 10, 12, 4)).pack(anchor="w")
+        body = ttk.Frame(win, padding=(12, 0))
+        body.pack(fill="both", expand=True)
+        lb = tk.Listbox(body, activestyle="none", exportselection=False, font=("Segoe UI", 10))
+        lb.pack(side="left", fill="both", expand=True)
+        self.set_list = lb
+        side = ttk.Frame(body)
+        side.pack(side="left", fill="y", padx=(10, 0))
+        ttk.Button(side, text="Nach oben", command=lambda: self.move_setting(-1)).pack(fill="x")
+        ttk.Button(side, text="Nach unten", command=lambda: self.move_setting(1)).pack(fill="x", pady=6)
+        ttk.Button(side, text="Ein/Aus", command=self.toggle_setting).pack(fill="x")
+        ttk.Button(side, text="Standard", command=self.reset_settings).pack(fill="x", pady=(18, 0))
+        lb.bind("<Double-1>", lambda e: self.toggle_setting())
+        lb.bind("<space>", lambda e: self.toggle_setting() or "break")
+
+        ttk.Label(win, text="Titel ist immer sichtbar. Doppelklick schaltet eine Spalte ein oder aus.",
+                  padding=(12, 8)).pack(anchor="w")
+        btns = ttk.Frame(win, padding=12)
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Übernehmen", command=self.apply_settings).pack(side="right")
+        ttk.Button(btns, text="Abbrechen", command=win.destroy).pack(side="right", padx=6)
+        self.fill_setting_list(0)
+        self.apply_theme()
+
+    def fill_setting_list(self, select):
+        lb = self.set_list
+        lb.delete(0, "end")
+        for k in self.set_order:
+            mark = "☑" if k in self.set_vis else "☐"
+            lb.insert("end", f"{mark}  {COLUMN_LABELS[k]}")
+        lb.selection_set(select)
+        lb.activate(select)
+
+    def current_setting(self):
+        sel = self.set_list.curselection()
+        return sel[0] if sel else 0
+
+    def move_setting(self, d):
+        i = self.current_setting()
+        j = i + d
+        if 0 <= j < len(self.set_order):
+            self.set_order[i], self.set_order[j] = self.set_order[j], self.set_order[i]
+            self.fill_setting_list(j)
+
+    def toggle_setting(self):
+        i = self.current_setting()
+        k = self.set_order[i]
+        if k in LOCKED_COLUMNS:
+            return
+        if k in self.set_vis:
+            self.set_vis.discard(k)
+        else:
+            self.set_vis.add(k)
+        self.fill_setting_list(i)
+
+    def reset_settings(self):
+        self.set_order = list(COLUMN_KEYS)
+        self.set_vis = set(DEFAULT_VISIBLE) | LOCKED_COLUMNS
+        self.fill_setting_list(0)
+
+    def apply_settings(self):
+        self.col_order = list(self.set_order)
+        self.col_visible = set(self.set_vis) | LOCKED_COLUMNS
+        self.apply_columns()
+        self.save()
+        self.set_win.destroy()
+
+    def on_click(self, event):
+        if self.tree.identify_region(event.x, event.y) != "cell":
+            return
+        cols = self.tree.cget("displaycolumns")
+        idx = int(self.tree.identify_column(event.x)[1:]) - 1
+        if 0 <= idx < len(cols) and cols[idx] == "pin":
+            row = self.tree.identify_row(event.y)
+            if row in self.by_id:
+                self.set_pin([row])
+                return "break"
+
+    def toggle_pin(self):
+        ids = [it["id"] for it in self.selected_items()]
+        if ids:
+            self.set_pin(ids)
+
+    def set_pin(self, ids):
+        mark = not all(i in self.pinned for i in ids)
+        for i in ids:
+            it = self.by_id[i]
+            if mark:
+                self.pinned[i] = {k: it.get(k) for k in
+                                  ("id", "title", "channel", "channel_id", "duration",
+                                   "views", "date", "verified")}
+                log("PIN", f"{i} | {it['title']} | {it['channel']}")
+            else:
+                self.pinned.pop(i, None)
+                log("UNPIN", f"{i} | {it['title']} | {it['channel']}")
+        self.save()
+        self.render()
+
     def update_headings(self):
         for key, text, _, _ in COLUMNS:
             arrow = ""
@@ -588,6 +755,10 @@ class App(tk.Tk):
             return it["title"].lower()
         if c == "kanal":
             return it["channel"].lower()
+        if c == "pin":
+            return 0 if it["id"] in self.pinned else 1
+        if c == "verif":
+            return 1 if it.get("verified") else 0
         if c == "datum":
             return it["date"] or ""
         if c == "dauer":
@@ -598,18 +769,24 @@ class App(tk.Tk):
         selected = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
         rows = []
+        kept = []
         for it in self.items:
             hid = it["id"] in self.hidden
             blk = self.chan_key(it) in self.blocked
             dl = self.is_downloaded(it["id"])
-            if (hid or blk) and not self.show_hidden.get():
-                continue
-            if dl and self.hide_downloaded.get():
-                continue
+            pin = it["id"] in self.pinned
+            if not pin:
+                if (hid or blk) and not self.show_hidden.get():
+                    continue
+                if dl and self.hide_downloaded.get():
+                    continue
+                if len(rows) - len(kept) >= RESULTS:
+                    continue
+            else:
+                kept.append(it["id"])
             rows.append((it, hid, blk, dl))
-            if len(rows) >= RESULTS:
-                break
         rows.sort(key=lambda r: self.sort_key(r[0]), reverse=self.sort_rev)
+        rows.sort(key=lambda r: r[0]["id"] not in self.pinned)
         for it, hid, blk, dl in rows:
             tags = []
             if hid or blk:
@@ -618,8 +795,9 @@ class App(tk.Tk):
                 tags.append("downloaded")
             prefix = ("⊘ " if (hid or blk) else "") + ("✓ " if dl else "")
             self.tree.insert("", "end", iid=it["id"], tags=tags, values=(
-                it["rank"], prefix + it["title"], it["channel"], fmt_date(it["date"]),
-                fmt_dur(it["duration"]), fmt_views(it["views"]),
+                "★" if it["id"] in self.pinned else "☆", it["rank"], prefix + it["title"],
+                it["channel"], "✔ verifiziert" if it.get("verified") else "",
+                fmt_date(it["date"]), fmt_dur(it["duration"]), fmt_views(it["views"]),
             ))
         keep = [i for i in selected if self.tree.exists(i)]
         if keep:
@@ -858,6 +1036,15 @@ class App(tk.Tk):
                 "queued": False,
                 "url": f"https://www.youtube.com/watch?v={vid}",
             })
+        for vid, p in self.pinned.items():
+            if vid not in seen:
+                self.items.append({
+                    **p,
+                    "rank": len(self.items) + 1,
+                    "date": p.get("date") or self.cache["dates"].get(vid) or None,
+                    "queued": False,
+                    "url": f"https://www.youtube.com/watch?v={vid}",
+                })
         self.by_id = {it["id"]: it for it in self.items}
         self.save()
         self.refresh_disk()
@@ -967,15 +1154,19 @@ class App(tk.Tk):
             for n, it in enumerate(picked, 1):
                 self.set_status(f"Lade {n}/{len(picked)}: {it['title'][:60]} …")
                 try:
-                    if ydl.download([it["url"]]) == 0:
+                    info = ydl.extract_info(it["url"], download=True)
+                    good, reason, path = verify_download(info, it["id"], outdir)
+                    if good:
                         ok += 1
                         self.history.add(it["id"])
                         self.disk_ids.add(it["id"])
-                        log("DOWNLOAD", f"{it['id']} | {it['title']} | {it['channel']}")
+                        log("DOWNLOAD", f"{it['id']} | {it['title']} | {it['channel']} | {path}")
                         self.after(0, self.save)
                         self.after(0, self.render)
                     else:
                         failed += 1
+                        last_err = f"Prüfung fehlgeschlagen: {reason}"
+                        log("VERIFY FAIL", f"{it['id']} | {reason}")
                 except Exception as err:
                     failed += 1
                     last_err = short_err(err, 200)
