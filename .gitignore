@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.idea/
+.vscode/
+cookies.txt
+*.log
+.ytdl_gui*

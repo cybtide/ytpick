@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ytpick"
+dynamic = ["version"]
+description = "Desktop application to search YouTube, pick videos and download them in best quality. A graphical front end for yt-dlp."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["yt-dlp[default]"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Environment :: X11 Applications",
+    "Environment :: Win32 (MS Windows)",
+    "Topic :: Multimedia :: Video",
+]
+
+[project.gui-scripts]
+ytpick = "ytpick:main"
+
+[tool.setuptools]
+py-modules = ["ytpick"]
+
+[tool.setuptools.dynamic]
+version = {attr = "ytpick.__version__"}

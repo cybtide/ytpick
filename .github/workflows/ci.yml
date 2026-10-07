@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m py_compile ytpick.py ytpick_cli.py
+      - name: Check changelog entry for current version
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick.py)
+          grep -qF "## [$version]" CHANGELOG.md
+      - run: python -m pip install .
