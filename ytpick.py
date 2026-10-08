@@ -79,7 +79,7 @@ def refresh_windows_path():
 
 refresh_windows_path()
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 STATE_FILE = Path.home() / ".ytdl_gui.json"
 CACHE_FILE = Path.home() / ".ytdl_gui_cache.json"
