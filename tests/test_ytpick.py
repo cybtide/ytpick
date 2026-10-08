@@ -7,8 +7,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import webbrowser
+from tkinter import messagebox, simpledialog
+
 import ytpick
 import ytpick_cli
+from ytpick import app, blocklist, constants, i18n, theme, update, util, ytdl
 
 VID = "abcdefghijk"
 
@@ -23,29 +27,29 @@ class VerifyDownloadTests(unittest.TestCase):
         return {"id": vid, "requested_downloads": [{"filepath": str(path or self.file)}]}
 
     def test_accepts_matching_file(self):
-        ok, reason, path = ytpick.verify_download(self.info(), VID, self.dir)
+        ok, reason, path = ytdl.verify_download(self.info(), VID, self.dir)
         self.assertTrue(ok, reason)
         self.assertEqual(path, str(self.file))
 
     def test_rejects_wrong_id(self):
-        ok, _, _ = ytpick.verify_download(self.info(vid="zzzzzzzzzzz"), VID, self.dir)
+        ok, _, _ = ytdl.verify_download(self.info(vid="zzzzzzzzzzz"), VID, self.dir)
         self.assertFalse(ok)
 
     def test_rejects_empty_file(self):
         self.file.write_bytes(b"")
-        ok, _, _ = ytpick.verify_download(self.info(), VID, self.dir)
+        ok, _, _ = ytdl.verify_download(self.info(), VID, self.dir)
         self.assertFalse(ok)
 
     def test_rejects_file_without_id_in_name(self):
         other = self.dir / "Title.mkv"
         other.write_bytes(b"data")
-        ok, _, _ = ytpick.verify_download(self.info(path=other), VID, self.dir)
+        ok, _, _ = ytdl.verify_download(self.info(path=other), VID, self.dir)
         self.assertFalse(ok)
 
     def test_rejects_file_outside_target_folder(self):
         elsewhere = Path(tempfile.mkdtemp()) / f"Title [{VID}].mkv"
         elsewhere.write_bytes(b"data")
-        ok, _, _ = ytpick.verify_download(self.info(path=elsewhere), VID, self.dir)
+        ok, _, _ = ytdl.verify_download(self.info(path=elsewhere), VID, self.dir)
         self.assertFalse(ok)
 
     def test_accepts_channel_subfolder(self):
@@ -53,22 +57,22 @@ class VerifyDownloadTests(unittest.TestCase):
         sub.mkdir()
         f = sub / f"Title [{VID}].mkv"
         f.write_bytes(b"data")
-        ok, _, _ = ytpick.verify_download(self.info(path=f), VID, self.dir)
+        ok, _, _ = ytdl.verify_download(self.info(path=f), VID, self.dir)
         self.assertTrue(ok)
 
     def test_rejects_missing_info(self):
-        ok, _, _ = ytpick.verify_download(None, VID, self.dir)
+        ok, _, _ = ytdl.verify_download(None, VID, self.dir)
         self.assertFalse(ok)
 
 
 class ParseQueryTests(unittest.TestCase):
     def test_plain_search(self):
-        spec = ytpick.parse_query("lofi beats")
+        spec = ytdl.parse_query("lofi beats")
         self.assertEqual(spec["kind"], "search")
         self.assertTrue(spec["url"].startswith("ytsearch"))
 
     def test_handle_with_filter(self):
-        spec = ytpick.parse_query("@someone training")
+        spec = ytdl.parse_query("@someone training")
         self.assertEqual(spec["kind"], "channel")
         self.assertEqual(spec["term"], "training")
         self.assertTrue(spec["url"].endswith("/@someone/videos"))
@@ -76,8 +80,8 @@ class ParseQueryTests(unittest.TestCase):
 
 class DownloadOptionsTests(unittest.TestCase):
     def opts(self, mode="mkv", **fmt):
-        merged = {**ytpick.DEFAULT_FMT, **fmt}
-        return ytpick.download_opts({}, Path("/out"), mode, merged, lambda d: None)
+        merged = {**constants.DEFAULT_FMT, **fmt}
+        return ytdl.download_opts({}, Path("/out"), mode, merged, lambda d: None)
 
     def test_best_quality_default(self):
         self.assertEqual(self.opts()["format"], "bv*+ba/b")
@@ -132,30 +136,30 @@ class DownloadOptionsTests(unittest.TestCase):
 
 class HelperTests(unittest.TestCase):
     def test_parse_time(self):
-        self.assertEqual(ytpick.parse_time("1:20"), 80)
-        self.assertEqual(ytpick.parse_time("1:02:03"), 3723)
-        self.assertEqual(ytpick.parse_time("45.5"), 45.5)
-        self.assertIsNone(ytpick.parse_time("  "))
+        self.assertEqual(util.parse_time("1:20"), 80)
+        self.assertEqual(util.parse_time("1:02:03"), 3723)
+        self.assertEqual(util.parse_time("45.5"), 45.5)
+        self.assertIsNone(util.parse_time("  "))
         with self.assertRaises(ValueError):
-            ytpick.parse_time("a:b")
+            util.parse_time("a:b")
         with self.assertRaises(ValueError):
-            ytpick.parse_time("1:2:3:4")
+            util.parse_time("1:2:3:4")
 
     def test_parse_clock(self):
-        self.assertEqual(ytpick.parse_clock("01:30"), 90)
+        self.assertEqual(util.parse_clock("01:30"), 90)
         with self.assertRaises(ValueError):
-            ytpick.parse_clock("25:00")
+            util.parse_clock("25:00")
 
     def test_in_window_overnight(self):
         start, end = 22 * 60, 6 * 60
-        self.assertTrue(ytpick.in_window(23 * 60, start, end))
-        self.assertTrue(ytpick.in_window(5 * 60, start, end))
-        self.assertFalse(ytpick.in_window(12 * 60, start, end))
+        self.assertTrue(util.in_window(23 * 60, start, end))
+        self.assertTrue(util.in_window(5 * 60, start, end))
+        self.assertFalse(util.in_window(12 * 60, start, end))
 
     def test_in_window_same_day(self):
-        self.assertTrue(ytpick.in_window(120, 60, 360))
-        self.assertFalse(ytpick.in_window(400, 60, 360))
-        self.assertTrue(ytpick.in_window(400, 100, 100))
+        self.assertTrue(util.in_window(120, 60, 360))
+        self.assertFalse(util.in_window(400, 60, 360))
+        self.assertTrue(util.in_window(400, 100, 100))
 
     def test_detect_browsers(self):
         from unittest import mock
@@ -163,42 +167,42 @@ class HelperTests(unittest.TestCase):
         (home / ".mozilla" / "firefox").mkdir(parents=True)
         with mock.patch.object(Path, "home", return_value=home), \
                 mock.patch.dict(os.environ, {"LOCALAPPDATA": str(home / "x"), "APPDATA": str(home / "y")}):
-            self.assertEqual(ytpick.detect_browsers(), ["firefox"])
+            self.assertEqual(util.detect_browsers(), ["firefox"])
 
     def test_playlist_query(self):
-        spec = ytpick.parse_query("https://www.youtube.com/playlist?list=PLabc123")
+        spec = ytdl.parse_query("https://www.youtube.com/playlist?list=PLabc123")
         self.assertEqual(spec["kind"], "playlist")
         self.assertEqual(spec["url"], "https://www.youtube.com/playlist?list=PLabc123")
 
 
 class NamingTests(unittest.TestCase):
     def test_presets_keep_id(self):
-        for key in ytpick.NAME_PRESETS:
-            self.assertIn("[%(id)s]", ytpick.name_template({"name": key}, 3))
+        for key in constants.NAME_PRESETS:
+            self.assertIn("[%(id)s]", ytdl.name_template({"name": key}, 3))
 
     def test_rank_preset(self):
-        self.assertTrue(ytpick.name_template({"name": "rank_title"}, 7).startswith("07 - "))
+        self.assertTrue(ytdl.name_template({"name": "rank_title"}, 7).startswith("07 - "))
 
     def test_unknown_preset_falls_back(self):
-        self.assertEqual(ytpick.name_template({"name": "nope"}), ytpick.NAME_PRESETS["title"])
+        self.assertEqual(ytdl.name_template({"name": "nope"}), constants.NAME_PRESETS["title"])
 
     def test_template_used_in_outtmpl(self):
-        o = ytpick.download_opts({}, Path("/out"), "mkv", {**ytpick.DEFAULT_FMT, "name": "channel_title"},
+        o = ytdl.download_opts({}, Path("/out"), "mkv", {**constants.DEFAULT_FMT, "name": "channel_title"},
                                  lambda d: None, 1)
         self.assertIn("%(channel)s - ", o["outtmpl"])
 
 
 class VideoLinkTests(unittest.TestCase):
     def test_short_link(self):
-        spec = ytpick.parse_query("https://youtu.be/abcdefghijk")
+        spec = ytdl.parse_query("https://youtu.be/abcdefghijk")
         self.assertEqual(spec["kind"], "video")
         self.assertEqual(spec["url"], "https://youtu.be/abcdefghijk")
 
     def test_watch_link(self):
-        self.assertEqual(ytpick.parse_query("https://www.youtube.com/watch?v=abcdefghijk")["kind"], "video")
+        self.assertEqual(ytdl.parse_query("https://www.youtube.com/watch?v=abcdefghijk")["kind"], "video")
 
     def test_watch_link_with_list_is_playlist_free(self):
-        spec = ytpick.parse_query("https://www.youtube.com/playlist?list=PLx")
+        spec = ytdl.parse_query("https://www.youtube.com/playlist?list=PLx")
         self.assertEqual(spec["kind"], "playlist")
 
     def test_clip_regex(self):
@@ -206,18 +210,18 @@ class VideoLinkTests(unittest.TestCase):
               "https://music.youtube.com/watch?v=abc"]
         bad = ["https://example.com/watch?v=abc", "hello youtu.be/abc", "https://youtube.com.evil.io/x"]
         for u in ok:
-            self.assertTrue(ytpick.CLIP_RE.match(u), u)
+            self.assertTrue(constants.CLIP_RE.match(u), u)
         for u in bad:
-            self.assertFalse(ytpick.CLIP_RE.match(u), u)
+            self.assertFalse(constants.CLIP_RE.match(u), u)
 
     def test_shutdown_command(self):
-        self.assertIsInstance(ytpick.shutdown_command(), list)
+        self.assertIsInstance(util.shutdown_command(), list)
 
     def test_frozen_blocks_upgrade(self):
         from unittest import mock
-        with mock.patch.object(ytpick, "FROZEN", True):
+        with mock.patch.object(ytdl, "FROZEN", True):
             with self.assertRaises(RuntimeError):
-                ytpick.upgrade_ytdlp()
+                ytdl.upgrade_ytdlp()
 
 
 class StatsTests(unittest.TestCase):
@@ -230,7 +234,7 @@ class StatsTests(unittest.TestCase):
             "c": {"mode": "mp4", "channel": "Y", "at": "2026-09-20 09:00:00", "size": 200, "duration": 30},
             "d": {"mode": "audio", "channel": "Z", "at": "2025-01-01 09:00:00"},
         }
-        st = ytpick.compute_stats(downloads, {"a", "b", "c", "d", "old"}, today)
+        st = util.compute_stats(downloads, {"a", "b", "c", "d", "old"}, today)
         self.assertEqual(st["total"], 4)
         self.assertEqual(st["videos"], 2)
         self.assertEqual(st["music"], 2)
@@ -244,12 +248,12 @@ class StatsTests(unittest.TestCase):
         self.assertEqual(dict(st["months"])["2026-09"], 1)
 
     def test_formatting(self):
-        self.assertEqual(ytpick.fmt_size(512), "512 B")
-        self.assertEqual(ytpick.fmt_size(1536), "1.5 KB")
-        self.assertEqual(ytpick.fmt_hours(3660), "1:01 h")
+        self.assertEqual(util.fmt_size(512), "512 B")
+        self.assertEqual(util.fmt_size(1536), "1.5 KB")
+        self.assertEqual(util.fmt_hours(3660), "1:01 h")
 
     def test_empty(self):
-        st = ytpick.compute_stats({}, set())
+        st = util.compute_stats({}, set())
         self.assertEqual((st["total"], st["size"]), (0, 0))
 
 
@@ -259,46 +263,46 @@ class UpgradeTests(unittest.TestCase):
         fake = mock.Mock(returncode=1, stderr="line one\nerror: externally-managed-environment", stdout="")
         with mock.patch("subprocess.run", return_value=fake):
             with self.assertRaises(RuntimeError) as ctx:
-                ytpick.upgrade_ytdlp()
+                ytdl.upgrade_ytdlp()
         self.assertIn("externally-managed", str(ctx.exception))
 
     def test_returns_installed_version(self):
         from unittest import mock
         fake = mock.Mock(returncode=0, stderr="", stdout="ok")
         with mock.patch("subprocess.run", return_value=fake), \
-                mock.patch.object(ytpick, "installed_ytdlp_version", return_value="9.9.9"):
-            self.assertEqual(ytpick.upgrade_ytdlp(), "9.9.9")
+                mock.patch.object(ytdl, "installed_ytdlp_version", return_value="9.9.9"):
+            self.assertEqual(ytdl.upgrade_ytdlp(), "9.9.9")
 
 
 class NormalizeTests(unittest.TestCase):
     def test_verified_flag_is_optional(self):
-        self.assertIsNone(ytpick.normalize({"id": VID}, None)["verified"])
-        self.assertTrue(ytpick.normalize({"id": VID, "channel_is_verified": True}, None)["verified"])
+        self.assertIsNone(ytdl.normalize({"id": VID}, None)["verified"])
+        self.assertTrue(ytdl.normalize({"id": VID, "channel_is_verified": True}, None)["verified"])
 
 
 class EasterEggTests(unittest.TestCase):
     def test_lookup(self):
         for q in ("Harry Potter", "  hsv ", "@HSV", "SEAHAWKS", "hamburg", "Seattle", "konami"):
-            self.assertTrue(ytpick.easter_egg(q), q)
+            self.assertTrue(util.easter_egg(q), q)
         for q in ("hsv training", "", None, "lofi"):
-            self.assertIsNone(ytpick.easter_egg(q), q)
+            self.assertIsNone(util.easter_egg(q), q)
 
     def test_all_eggs_translated(self):
-        for key, text in ytpick.EGGS.items():
+        for key, text in util.EGGS.items():
             if key != "konami":
-                self.assertIn(text, ytpick.TRANSLATIONS, key)
+                self.assertIn(text, i18n.TRANSLATIONS, key)
 
 
 class UpdateCheckTests(unittest.TestCase):
     def test_parse_and_compare_versions(self):
-        self.assertEqual(ytpick.parse_version("v0.4.1"), (0, 4, 1))
-        self.assertEqual(ytpick.parse_version("1.0.0-beta"), (1, 0, 0))
-        self.assertIsNone(ytpick.parse_version("latest"))
-        self.assertTrue(ytpick.is_newer("0.10.0", "0.9.9"))
-        self.assertTrue(ytpick.is_newer("v1.0.0", "0.99.99"))
-        self.assertFalse(ytpick.is_newer("0.4.0", "0.4.0"))
-        self.assertFalse(ytpick.is_newer("0.3.9", "0.4.0"))
-        self.assertFalse(ytpick.is_newer("kaputt", "0.4.0"))
+        self.assertEqual(update.parse_version("v0.4.1"), (0, 4, 1))
+        self.assertEqual(update.parse_version("1.0.0-beta"), (1, 0, 0))
+        self.assertIsNone(update.parse_version("latest"))
+        self.assertTrue(update.is_newer("0.10.0", "0.9.9"))
+        self.assertTrue(update.is_newer("v1.0.0", "0.99.99"))
+        self.assertFalse(update.is_newer("0.4.0", "0.4.0"))
+        self.assertFalse(update.is_newer("0.3.9", "0.4.0"))
+        self.assertFalse(update.is_newer("kaputt", "0.4.0"))
 
     def test_fetch_latest_release(self):
         import io
@@ -312,12 +316,12 @@ class UpdateCheckTests(unittest.TestCase):
                 return False
 
         body = js.dumps({"tag_name": "v9.9.9", "html_url": "https://github.com/x/y/releases/tag/v9.9.9"})
-        with mock.patch.object(ytpick, "urlopen", return_value=Resp(body.encode())):
-            info = ytpick.fetch_latest_release()
+        with mock.patch.object(update, "urlopen", return_value=Resp(body.encode())):
+            info = update.fetch_latest_release()
         self.assertEqual(info, {"version": "9.9.9", "url": "https://github.com/x/y/releases/tag/v9.9.9"})
-        with mock.patch.object(ytpick, "urlopen", return_value=Resp(b'{"tag_name": "x"}')):
+        with mock.patch.object(update, "urlopen", return_value=Resp(b'{"tag_name": "x"}')):
             with self.assertRaises(ValueError):
-                ytpick.fetch_latest_release()
+                update.fetch_latest_release()
 
 
 class CliTests(unittest.TestCase):
@@ -368,7 +372,7 @@ class CliTests(unittest.TestCase):
         out = Path(tempfile.mkdtemp())
         for argv, mode, fmt in cases:
             cli = ytpick_cli.build_opts(self.parse(*argv), out)
-            gui = ytpick.download_opts({}, out, mode, fmt, lambda d: None)
+            gui = ytdl.download_opts({}, out, mode, fmt, lambda d: None)
             for key in ("format", "merge_output_format", "format_sort", "postprocessors", "outtmpl",
                         "writesubtitles", "subtitleslangs", "writethumbnail", "force_keyframes_at_cuts"):
                 self.assertEqual(cli.get(key), gui.get(key), (argv, key))
@@ -405,12 +409,18 @@ class GuiSmokeTests(unittest.TestCase):
         if sys.platform != "win32" and not os.environ.get("DISPLAY"):
             raise unittest.SkipTest("no display")
         home = Path(tempfile.mkdtemp())
-        ytpick.STATE_FILE = home / "state.json"
-        ytpick.CACHE_FILE = home / "cache.json"
-        ytpick.LOG_FILE = home / "log.txt"
-        ytpick.THUMB_DIR = home / "thumbs"
+        paths = {
+            "STATE_FILE": home / "state.json",
+            "CACHE_FILE": home / "cache.json",
+            "LOG_FILE": home / "log.txt",
+            "THUMB_DIR": home / "thumbs",
+        }
+        for module in (constants, app, util, blocklist, theme):
+            for name, value in paths.items():
+                if hasattr(module, name):
+                    setattr(module, name, value)
         try:
-            cls.app = ytpick.App()
+            cls.app = app.App()
         except Exception as err:
             raise unittest.SkipTest(f"tk unavailable: {err}")
         cls.app.show_readme.set(False)
@@ -485,7 +495,7 @@ class GuiSmokeTests(unittest.TestCase):
         items = self.items(3)
         items[0]["date"] = "20200101"
         self.show(items)
-        label = ytpick._(ytpick.DATE_RANGES[1][0])
+        label = i18n._(constants.DATE_RANGES[1][0])
         self.app.f_range.set(label)
         self.app.update()
         self.assertNotIn("vid00000000", self.app.tree.get_children())
@@ -494,11 +504,11 @@ class GuiSmokeTests(unittest.TestCase):
     def test_playlist_limit_shows_all_items(self):
         items = self.items(60)
         self.app.token += 1
-        self.app._show(items, self.app.token, "playlist", ytpick.CHANNEL_POOL)
+        self.app._show(items, self.app.token, "playlist", constants.CHANNEL_POOL)
         self.app.update()
         self.assertEqual(len(self.app.tree.get_children()), 60)
         self.show(items)
-        self.assertEqual(len(self.app.tree.get_children()), ytpick.RESULTS)
+        self.assertEqual(len(self.app.tree.get_children()), constants.RESULTS)
 
     def test_duplicate_download_prompt(self):
         from unittest import mock
@@ -507,15 +517,15 @@ class GuiSmokeTests(unittest.TestCase):
         self.app.history.add(item["id"])
         self.app.paused = True
         before = len(self.app.jobs)
-        with mock.patch.object(ytpick.messagebox, "askyesnocancel", return_value=False):
-            self.app.enqueue([item], dict(ytpick.DEFAULT_FMT), "mkv")
+        with mock.patch.object(messagebox, "askyesnocancel", return_value=False):
+            self.app.enqueue([item], dict(constants.DEFAULT_FMT), "mkv")
         self.assertEqual(len(self.app.jobs), before)
-        with mock.patch.object(ytpick.messagebox, "askyesnocancel", return_value=True):
-            self.app.enqueue([item], dict(ytpick.DEFAULT_FMT), "mp3")
+        with mock.patch.object(messagebox, "askyesnocancel", return_value=True):
+            self.app.enqueue([item], dict(constants.DEFAULT_FMT), "mp3")
         self.assertEqual(len(self.app.jobs), before + 1)
-        with mock.patch.object(ytpick.messagebox, "askyesnocancel", return_value=None):
+        with mock.patch.object(messagebox, "askyesnocancel", return_value=None):
             self.app.cancel_jobs(all_jobs=True)
-            self.app.enqueue([item], dict(ytpick.DEFAULT_FMT), "mkv")
+            self.app.enqueue([item], dict(constants.DEFAULT_FMT), "mkv")
         self.assertEqual(len(self.app.jobs), before + 2 - 1)
         self.app.history.discard(item["id"])
         self.app.paused = False
@@ -527,12 +537,12 @@ class GuiSmokeTests(unittest.TestCase):
         item["id"] = "queue_open_x"
         self.app.open_queue_on_add = True
         with mock.patch.object(self.app, "open_queue") as opened:
-            self.app.enqueue([item], dict(ytpick.DEFAULT_FMT), "mp3")
+            self.app.enqueue([item], dict(constants.DEFAULT_FMT), "mp3")
         opened.assert_called_once()
         self.app.open_queue_on_add = False
         item2 = dict(item, id="queue_open_y")
         with mock.patch.object(self.app, "open_queue") as opened:
-            self.app.enqueue([item2], dict(ytpick.DEFAULT_FMT), "mp3")
+            self.app.enqueue([item2], dict(constants.DEFAULT_FMT), "mp3")
         opened.assert_not_called()
         self.app.cancel_jobs(all_jobs=True)
 
@@ -553,11 +563,11 @@ class GuiSmokeTests(unittest.TestCase):
         self.show(self.items())
         before = self.app.limit
         self.app.show_more()
-        self.assertEqual(self.app.limit, before + ytpick.RESULTS)
+        self.assertEqual(self.app.limit, before + constants.RESULTS)
 
     def test_show_more_loads_bigger_pool_when_exhausted(self):
         self.show(self.items())
-        self.app.cur_spec = ytpick.parse_query("@abc")
+        self.app.cur_spec = ytdl.parse_query("@abc")
         self.app.pool_end = False
         with mock.patch.object(self.app, "load_more_pool") as loader:
             self.app.limit = 1000
@@ -573,7 +583,7 @@ class GuiSmokeTests(unittest.TestCase):
         items = self.items()
         self.show(items)
         with mock.patch.object(self.app, "open_queue"):
-            self.app.enqueue([items[0]], dict(ytpick.DEFAULT_FMT), "mp3")
+            self.app.enqueue([items[0]], dict(constants.DEFAULT_FMT), "mp3")
         iid = items[0]["id"]
         self.assertIn("queued", self.app.tree.item(iid, "tags"))
         self.assertTrue(self.app.tree.set(iid, "titel").startswith("⏳"))
@@ -615,7 +625,7 @@ class GuiSmokeTests(unittest.TestCase):
         self.app.on_update_result(info, None, False)
         self.assertIsNotNone(self.app.update_bar)
         self.assertTrue(self.app.update_bar.winfo_manager())
-        with mock.patch.object(ytpick.webbrowser, "open") as opened:
+        with mock.patch.object(webbrowser, "open") as opened:
             self.app.open_update_page()
         opened.assert_called_once_with("https://example.invalid/r")
         self.app.skip_update()
@@ -627,10 +637,10 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertTrue(self.app.update_bar.winfo_manager())
         self.app.hide_update_bar()
         same = {"version": ytpick.__version__, "url": "u"}
-        with mock.patch.object(ytpick.messagebox, "showinfo") as shown:
+        with mock.patch.object(messagebox, "showinfo") as shown:
             self.app.on_update_result(same, None, True)
         shown.assert_called_once()
-        with mock.patch.object(ytpick.messagebox, "showerror") as failed:
+        with mock.patch.object(messagebox, "showerror") as failed:
             self.app.on_update_result(None, "offline", True)
         failed.assert_called_once()
         self.app.on_update_result(None, "offline", False)
@@ -649,7 +659,7 @@ class GuiSmokeTests(unittest.TestCase):
         self.show(self.items())
         self.app.paused = True
         self.app.rate_mb = 2
-        self.app.enqueue([self.app.items[3]], dict(ytpick.DEFAULT_FMT), "mkv")
+        self.app.enqueue([self.app.items[3]], dict(constants.DEFAULT_FMT), "mkv")
         self.assertEqual(self.app.jobs[-1]["base"]["ratelimit"], 2 * 1048576)
         self.app.rate_mb = 0
         self.app.cancel_jobs(all_jobs=True)
@@ -667,7 +677,7 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(len(self.app.search_hist), len(set(self.app.search_hist)))
         for i in range(60):
             self.app.remember_query(f"q{i}")
-        self.assertEqual(len(self.app.search_hist), ytpick.HISTORY_MAX)
+        self.assertEqual(len(self.app.search_hist), constants.HISTORY_MAX)
 
     def test_clipboard_bar(self):
         from unittest import mock
@@ -737,15 +747,15 @@ class GuiSmokeTests(unittest.TestCase):
 
     def test_pin_lists(self):
         self.show(self.items())
-        all_label = ytpick._("Alle")
+        all_label = i18n._("Alle")
         self.app.pin_view.set(all_label)
         self.app.set_pin(["vid00000001"])
-        self.assertEqual(self.app.pinned["vid00000001"]["list"], ytpick.DEFAULT_PIN_LIST)
+        self.assertEqual(self.app.pinned["vid00000001"]["list"], constants.DEFAULT_PIN_LIST)
         self.app.pin_lists.add("Musik")
         self.app.refresh_pin_lists()
         self.app.tree.selection_set(["vid00000002"])
         from unittest import mock
-        with mock.patch.object(ytpick.simpledialog, "askstring", return_value="Musik"):
+        with mock.patch.object(simpledialog, "askstring", return_value="Musik"):
             self.app.move_to_list()
         self.assertEqual(self.app.pinned["vid00000002"]["list"], "Musik")
         self.app.pin_view.set("Musik")
@@ -753,7 +763,7 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(self.app.tree.get_children()[0], "vid00000002")
         self.assertTrue(self.app.in_view("vid00000002"))
         self.assertFalse(self.app.in_view("vid00000001"))
-        self.app.pin_view.set(ytpick.DEFAULT_PIN_LIST)
+        self.app.pin_view.set(constants.DEFAULT_PIN_LIST)
         self.app.sync_pins()
         self.assertEqual(self.app.tree.get_children()[0], "vid00000001")
         self.app.pinned.clear()
@@ -764,7 +774,7 @@ class GuiSmokeTests(unittest.TestCase):
 
     def test_pins_from_other_search_view(self):
         self.show(self.items(3))
-        self.app.pin_view.set(ytpick._("Alle"))
+        self.app.pin_view.set(i18n._("Alle"))
         self.app.pinned["gone0000001"] = {"id": "gone0000001", "title": "Old", "channel": "C", "channel_id": "",
                                           "duration": 10, "views": 1, "date": "20260101", "verified": None,
                                           "list": "Musik"}
@@ -772,22 +782,22 @@ class GuiSmokeTests(unittest.TestCase):
         self.app.refresh_pin_lists()
         self.app.sync_pins()
         self.assertIn("gone0000001", self.app.tree.get_children())
-        self.app.pin_view.set(ytpick.DEFAULT_PIN_LIST)
+        self.app.pin_view.set(constants.DEFAULT_PIN_LIST)
         self.app.sync_pins()
         self.assertNotIn("gone0000001", self.app.tree.get_children())
         self.app.pinned.clear()
         self.app.pin_lists.clear()
-        self.app.pin_view.set(ytpick._("Alle"))
+        self.app.pin_view.set(i18n._("Alle"))
         self.app.refresh_pin_lists()
         self.app.sync_pins()
 
     def test_stats_window(self):
         self.app.downloads["vid00000002"] = {"title": "T", "channel": "C", "mode": "mp3", "height": 0,
-                                             "at": ytpick.now(), "file": "", "size": 2048, "duration": 90}
+                                             "at": util.now(), "file": "", "size": 2048, "duration": 90}
         self.app.open_stats()
         self.app.update()
         values = [self.app.s_trees["sum"].item(i, "values") for i in self.app.s_trees["sum"].get_children()]
-        self.assertTrue(any(str(v[1]) == "1" for v in values if v[0] == ytpick._("Downloads gesamt")))
+        self.assertTrue(any(str(v[1]) == "1" for v in values if v[0] == i18n._("Downloads gesamt")))
         self.assertEqual(len(self.app.s_trees["month"].get_children()), 12)
         self.app.s_win.destroy()
         self.app.downloads.pop("vid00000002")
@@ -807,8 +817,8 @@ class GuiSmokeTests(unittest.TestCase):
         self.show(self.items())
         self.app.paused = True
         before = len(self.app.jobs)
-        self.app.enqueue([self.app.items[0]], dict(ytpick.DEFAULT_FMT), "mkv")
-        self.app.enqueue([self.app.items[0]], dict(ytpick.DEFAULT_FMT), "mkv")
+        self.app.enqueue([self.app.items[0]], dict(constants.DEFAULT_FMT), "mkv")
+        self.app.enqueue([self.app.items[0]], dict(constants.DEFAULT_FMT), "mkv")
         self.assertEqual(len(self.app.jobs), before + 1)
         self.app.cancel_jobs(all_jobs=True)
         self.app.paused = False

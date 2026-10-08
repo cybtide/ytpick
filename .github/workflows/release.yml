@@ -14,14 +14,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify tag matches version
         run: |
-          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick.py)
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick/__init__.py)
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match version $version in ytpick.py"
+            echo "Tag $GITHUB_REF_NAME does not match version $version in ytpick/__init__.py"
             exit 1
           fi
           cli_version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick_cli.py)
           if [ "$cli_version" != "$version" ]; then
-            echo "ytpick_cli.py has version $cli_version, ytpick.py has $version"
+            echo "ytpick_cli.py has version $cli_version, ytpick has $version"
             exit 1
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
@@ -32,7 +32,7 @@ jobs:
       - name: Build Windows archive
         run: |
           mkdir "ytpick-$VERSION-windows"
-          cp -r setup.bat install.ps1 ytpick.py ytpick_cli.py README.md README.de.md LICENSE CHANGELOG.md assets "ytpick-$VERSION-windows/"
+          cp -r setup.bat install.ps1 ytpick ytpick_gui.py ytpick_cli.py README.md README.de.md LICENSE CHANGELOG.md assets "ytpick-$VERSION-windows/"
           zip -r "ytpick-$VERSION-windows.zip" "ytpick-$VERSION-windows"
       - uses: softprops/action-gh-release@v2
         with:
@@ -51,8 +51,8 @@ jobs:
       - name: Build executable
         shell: bash
         run: |
-          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick.py)
-          pyinstaller --noconfirm --onefile --windowed --name ytpick --icon assets/icon.ico --add-data "assets;assets" --collect-all yt_dlp --collect-all yt_dlp_ejs ytpick.py
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick/__init__.py)
+          pyinstaller --noconfirm --onefile --windowed --name ytpick --icon assets/icon.ico --add-data "assets;assets" --collect-all yt_dlp --collect-all yt_dlp_ejs ytpick_gui.py
           mv dist/ytpick.exe "dist/ytpick-$version-windows.exe"
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - uses: softprops/action-gh-release@v2
@@ -75,8 +75,8 @@ jobs:
       - run: python -m pip install pyinstaller "yt-dlp[default]" pillow
       - name: Build executables
         run: |
-          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick.py)
-          pyinstaller --noconfirm --onefile --windowed --name ytpick --add-data "assets:assets" --collect-all yt_dlp --collect-all yt_dlp_ejs ytpick.py
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick/__init__.py)
+          pyinstaller --noconfirm --onefile --windowed --name ytpick --add-data "assets:assets" --collect-all yt_dlp --collect-all yt_dlp_ejs ytpick_gui.py
           pyinstaller --noconfirm --onefile --name ytpick-cli --collect-all yt_dlp --collect-all yt_dlp_ejs ytpick_cli.py
           dist/ytpick-cli --version
           tar -C dist -czf "ytpick-$version-linux-x86_64.tar.gz" ytpick ytpick-cli

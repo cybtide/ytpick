@@ -30,7 +30,8 @@ ytpick = "ytpick:main"
 ytpick-cli = "ytpick_cli:entry"
 
 [tool.setuptools]
-py-modules = ["ytpick", "ytpick_cli"]
+packages = ["ytpick"]
+py-modules = ["ytpick_cli"]
 
 [tool.setuptools.dynamic]
 version = {attr = "ytpick.__version__"}

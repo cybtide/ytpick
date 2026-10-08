@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 $here   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $target = Join-Path $env:LOCALAPPDATA "ytpick"
-$script = "ytpick.py"
+$script = "ytpick_gui.py"
+$pkg    = "ytpick"
 
 function Step($t)  { Write-Host ""; Write-Host "==> $t" -ForegroundColor Cyan }
 function Ok($t)    { Write-Host "    OK: $t" -ForegroundColor Green }
@@ -44,8 +45,8 @@ function Get-PythonExe {
 try {
     Write-Host "ytpick - Setup" -ForegroundColor White
 
-    if (-not (Test-Path (Join-Path $here $script))) {
-        throw "$script wurde nicht neben dem Installer gefunden. Bitte alle Dateien im selben Ordner lassen."
+    if (-not ((Test-Path (Join-Path $here $script)) -and (Test-Path (Join-Path $here $pkg)))) {
+        throw "$script und der Ordner $pkg wurden nicht neben dem Installer gefunden. Bitte alle Dateien im selben Ordner lassen."
     }
 
     Step "Pruefe winget"
@@ -83,6 +84,9 @@ try {
     Step "Programm kopieren und Verknuepfungen anlegen"
     New-Item -ItemType Directory -Force -Path $target | Out-Null
     Copy-Item (Join-Path $here $script) (Join-Path $target $script) -Force
+    $pkgTarget = Join-Path $target $pkg
+    if (Test-Path $pkgTarget) { Remove-Item $pkgTarget -Recurse -Force }
+    Copy-Item (Join-Path $here $pkg) $target -Recurse -Force
     $assets = Join-Path $here "assets"
     if (Test-Path $assets) { Copy-Item $assets $target -Recurse -Force }
     $icon = Join-Path $target "assets\icon.ico"

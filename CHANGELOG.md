@@ -5,6 +5,11 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ## [Unveröffentlicht]
 
+### Geändert
+
+- Quellcode in das Paket `ytpick/` aufgeteilt (Konstanten, Übersetzungen, Hilfsfunktionen, yt-dlp-Teil und die Fenster-Teile als eigene Module); Start über `ytpick_gui.py`, `python -m ytpick` oder den Befehl `ytpick`, Verhalten unverändert
+- README: ausführlicherer Hinweis zur Nutzung (privater Gebrauch, Verantwortung, Nutzungsbedingungen, Cookies)
+
 ## [0.5.0] - 2026-10-08
 
 ### Hinzugefügt

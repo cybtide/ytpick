@@ -102,7 +102,7 @@ ffmpeg and Deno have to be installed separately. Leave out `[thumbnails]` if you
 
 ```
 pip install -r requirements.txt
-python ytpick.py
+python ytpick_gui.py
 ```
 
 ## Usage
@@ -170,13 +170,21 @@ python -m unittest discover -s tests -v
 
 The tests that open the window need a display (on Linux for example `xvfb-run`).
 
+Layout of the package `ytpick/`: `constants.py` (paths, limits, colours), `i18n.py` (translations, help texts), `util.py` (helpers without GUI), `ytdl.py` (yt-dlp: search, download options, verification), `update.py` (update check), and the window `app.py`, which combines the parts `theme`, `settings`, `pins`, `results`, `blocklist`, `search`, `downloads`, `desktop`, `reports` and `watch`. `ytpick_gui.py` is the start script, `ytpick_cli.py` the independent terminal client.
+
 ## Update check
 
 At startup (at most once a day) ytpick asks the public GitHub API for the latest release of this repository and shows a notice with a link to the download page when a newer version exists. Nothing is installed automatically, and no data about you is sent beyond the request itself. You can switch the check off in the settings or run it by hand under *Tools → Check for updates*.
 
 ## Notes on use
 
-ytpick is an independent project and not affiliated with YouTube or Google. Only download content you are entitled to copy, and observe YouTube's terms of service and the law of your country.
+ytpick is an independent project and not affiliated with YouTube or Google.
+
+- **Private use only.** The tool is meant for personal copies of content you are entitled to copy, such as your own videos, content under a free license or content whose rights holder allows it.
+- **You are responsible for what you download.** Do not redistribute or publish downloaded content without permission. The law differs from country to country; in Germany, for example, the private copy rules of § 53 UrhG and the ban on circumventing effective copy protection (§ 95a UrhG) apply.
+- **YouTube's terms of service** do not allow downloads outside the offered functions. Breaking them can lead to a blocked IP address or account.
+- **Cookies from your browser** are used only locally to sign in to YouTube. Using your account for automated downloads can get it restricted, so prefer a secondary account.
+- ytpick does not bypass paywalls or DRM, and the maintainers give no legal advice and accept no liability (see the [license](LICENSE)).
 
 yt-dlp, ffmpeg and Deno are independent projects with their own licenses. They are not part of this repository.
 
@@ -186,7 +194,7 @@ ytpick follows [Semantic Versioning](https://semver.org). The installed version 
 
 A release is created like this:
 
-1. Raise `__version__` in `ytpick.py`.
+1. Raise `__version__` in `ytpick/__init__.py` and `ytpick_cli.py`.
 2. Add a section `## [x.y.z] - YYYY-MM-DD` to `CHANGELOG.md`.
 3. Commit, tag `vx.y.z` and push.
 
