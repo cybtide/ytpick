@@ -431,6 +431,20 @@ class GuiSmokeTests(unittest.TestCase):
         self.app.show_more()
         self.assertEqual(self.app.limit, before + ytpick.RESULTS)
 
+    def test_show_more_loads_bigger_pool_when_exhausted(self):
+        self.show(self.items())
+        self.app.cur_spec = ytpick.parse_query("@abc")
+        self.app.pool_end = False
+        with mock.patch.object(self.app, "load_more_pool") as loader:
+            self.app.limit = 1000
+            self.app.show_more()
+        loader.assert_called_once()
+        self.app.pool_end = True
+        with mock.patch.object(self.app, "load_more_pool") as loader:
+            self.app.show_more()
+        loader.assert_not_called()
+        self.app.cur_spec = None
+
     def test_rate_limit_applied(self):
         self.show(self.items())
         self.app.paused = True

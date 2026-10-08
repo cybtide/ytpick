@@ -324,6 +324,8 @@ TRANSLATIONS.update({
     "Datum erneut versuchen": "Retry dates",
     "Hilfe": "Help",
     "Werkzeuge": "Tools",
+    " · keine weiteren Treffer": " · no more results",
+    "{l} … lädt weitere Treffer": "{l} … loading more results",
     "Mehr anzeigen (+{n})": "Show more (+{n})",
     "{n} sichtbar (Pool {p})": "{n} visible (pool {p})",
     "{n} ausgeblendet/geblockt": "{n} hidden/blocked",
@@ -888,6 +890,10 @@ class App(tk.Tk):
         self.window_end = s.get("window_end", DEFAULT_WINDOW[1])
         self.cookie_offered = False
         self.limit = RESULTS
+        self.cur_spec = None
+        self.pool_size = 0
+        self.pool_end = False
+        self.pool_prev = 0
         self.h_win = None
         self.s_win = None
         self.pin_view = None
@@ -1715,8 +1721,22 @@ class App(tk.Tk):
             return
         self.limit += RESULTS
         self.render()
+        if self.pool_exhausted() and self.cur_spec and not self.pool_end:
+            self.load_more_pool()
+            return
         self.status.set(_("{n} sichtbar (Pool {p})").format(n=len(self.shown), p=len(self.items))
                         + self.explain_hidden())
+
+    def pool_exhausted(self):
+        return sum(1 for it in self.shown if not self.in_view(it["id"])) < self.limit
+
+    def load_more_pool(self):
+        self.pool_size = max(self.pool_size, len(self.items)) + CHANNEL_POOL
+        self.pool_prev = len(self.items)
+        self.token += 1
+        self.status.set(_("{l} … lädt weitere Treffer").format(l=self.cur_spec["label"]))
+        threading.Thread(target=self._search, args=(self.cur_spec, self.token, self.pool_size, True),
+                         daemon=True).start()
 
     def explain_hidden(self):
         if self.shown or not self.items:
@@ -2007,8 +2027,12 @@ class App(tk.Tk):
         self.date_total = self.date_done = self.date_fail = 0
         spec = parse_query(query)
         self.remember_query(query)
+        self.cur_spec = spec if spec["kind"] in ("search", "channel", "playlist") else None
+        self.pool_size = POOL if spec["kind"] == "search" else CHANNEL_POOL
+        self.pool_end = False
         entry = self.cache["searches"].get(spec["key"])
         if entry and not force and time.time() - entry["at"] < CACHE_TTL:
+            self.pool_size = max(self.pool_size, len(entry["items"]))
             self._show(entry["items"], self.token,
                        _("{l} · aus Cache ({a})").format(l=spec["label"], a=age_text(entry["at"])),
                        CHANNEL_POOL if spec["kind"] == "playlist" else RESULTS)
@@ -2016,14 +2040,17 @@ class App(tk.Tk):
         self.status.set(_("{l} … lädt").format(l=spec["label"]))
         threading.Thread(target=self._search, args=(spec, self.token), daemon=True).start()
 
-    def _search(self, spec, token):
+    def _search(self, spec, token, pool=None, keep_limit=False):
         try:
             opts = {"quiet": True, "no_warnings": True, "extract_flat": True,
                     "logger": QuietLogger()}
+            url = spec["url"]
             if spec["kind"] in ("channel", "playlist"):
-                opts["playlistend"] = CHANNEL_POOL
+                opts["playlistend"] = pool or CHANNEL_POOL
+            elif pool:
+                url = f"ytsearch{pool}:" + url.split(":", 1)[1]
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(spec["url"], download=False)
+                info = ydl.extract_info(url, download=False)
             entries = info.get("entries") or ([info] if info.get("id") else [])
             items = []
             terms = [t for t in spec["term"].lower().split() if t]
@@ -2040,15 +2067,18 @@ class App(tk.Tk):
             if is_bot_error(err):
                 self.after(0, self.offer_cookies)
             return
-        self.after(0, lambda: self._finish_search(spec, items, token))
+        self.after(0, lambda: self._finish_search(spec, items, token, keep_limit))
 
-    def _finish_search(self, spec, items, token):
+    def _finish_search(self, spec, items, token, keep_limit=False):
         if items:
             self.cache["searches"][spec["key"]] = {"at": time.time(), "items": items}
             self.save_cache()
         if token == self.token:
-            self._show(items, token, _("{l} · frisch geladen").format(l=spec["label"]),
-                       CHANNEL_POOL if spec["kind"] == "playlist" else RESULTS)
+            limit = self.limit if keep_limit else (CHANNEL_POOL if spec["kind"] == "playlist" else RESULTS)
+            self._show(items, token, _("{l} · frisch geladen").format(l=spec["label"]), limit)
+            if keep_limit and len(items) <= self.pool_prev:
+                self.pool_end = True
+                self.status.set(self.status.get() + _(" · keine weiteren Treffer"))
 
     def _show(self, raw_items, token, note, limit=RESULTS):
         if token != self.token:
