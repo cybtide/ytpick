@@ -19,6 +19,9 @@ classifiers = [
     "Topic :: Multimedia :: Video",
 ]
 
+[project.optional-dependencies]
+thumbnails = ["pillow"]
+
 [project.gui-scripts]
 ytpick = "ytpick:main"
 

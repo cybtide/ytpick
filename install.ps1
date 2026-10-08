@@ -75,9 +75,9 @@ try {
     if (-not (Have "deno")) { Winget-Install "DenoLand.Deno" }
     if (Have "deno") { Ok "deno gefunden" } else { Write-Host "    Hinweis: deno wird nach einem Neustart des PCs gefunden." -ForegroundColor Yellow }
 
-    Step "yt-dlp (neueste Version)"
-    & $py -m pip install --upgrade "yt-dlp[default]"
-    if ($LASTEXITCODE -ne 0) { throw "pip-Installation von yt-dlp fehlgeschlagen." }
+    Step "yt-dlp (neueste Version) und Pillow (Vorschaubilder)"
+    & $py -m pip install --upgrade "yt-dlp[default]" pillow
+    if ($LASTEXITCODE -ne 0) { throw "pip-Installation von yt-dlp und Pillow fehlgeschlagen." }
     Ok "yt-dlp installiert"
 
     Step "Programm kopieren und Verknuepfungen anlegen"

@@ -12,6 +12,17 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 - Spalte „Status“ mit Hinweis auf verifizierte Kanäle, sofern YouTube die Angabe liefert
 - Merken von Videos: gemerkte Videos stehen oben und bleiben bei neuen Suchen erhalten
 - Prüfung nach dem Download, dass die fertige Datei zur gewählten Video-ID passt
+- Download-Warteschlange mit Fortschritt, Pause und Abbrechen
+- Download-Optionen pro Video: maximale Auflösung, Untertitel, Kapitel, Ordner pro Kanal
+- Beobachtete Kanäle mit Anzeige neuer Videos seit der letzten Prüfung
+- Optionale Vorschaubilder in der Trefferliste (Pillow)
+- Englische Oberfläche, Spracheinstellung in den Einstellungen
+- Englisches README mit Screenshot, deutsche Fassung in `README.de.md`
+- Automatische Tests und Testlauf im CI
+
+### Geändert
+
+- Die Download-Historie erkennt Dateien auch in Kanal-Unterordnern
 
 ## [0.1.0] - 2026-10-08
 

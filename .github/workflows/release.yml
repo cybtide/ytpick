@@ -27,7 +27,7 @@ jobs:
       - name: Build Windows archive
         run: |
           mkdir "ytpick-$VERSION-windows"
-          cp -r setup.bat install.ps1 ytpick.py README.md LICENSE CHANGELOG.md assets "ytpick-$VERSION-windows/"
+          cp -r setup.bat install.ps1 ytpick.py README.md README.de.md LICENSE CHANGELOG.md assets "ytpick-$VERSION-windows/"
           zip -r "ytpick-$VERSION-windows.zip" "ytpick-$VERSION-windows"
       - uses: softprops/action-gh-release@v2
         with:

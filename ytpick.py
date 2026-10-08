@@ -1,5 +1,6 @@
 import argparse
 import json
+import locale
 import os
 import queue
 import re
@@ -11,6 +12,7 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from urllib.request import Request, urlopen
 
 try:
     import yt_dlp
@@ -21,6 +23,31 @@ try:
     from yt_dlp.version import __version__ as YTDLP_VERSION
 except Exception:
     YTDLP_VERSION = "?"
+
+try:
+    from PIL import Image, ImageOps, ImageTk
+    HAVE_PIL = True
+except Exception:
+    HAVE_PIL = False
+
+LANG = "de"
+TRANSLATIONS = {}
+
+
+def _(text):
+    if LANG == "en":
+        return TRANSLATIONS.get(text, text)
+    return text
+
+
+def detect_language(choice):
+    if choice in ("de", "en"):
+        return choice
+    try:
+        loc = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()
+    except Exception:
+        loc = ""
+    return "de" if loc.startswith("de") else "en"
 
 
 def refresh_windows_path():
@@ -35,7 +62,7 @@ def refresh_windows_path():
         ):
             try:
                 with winreg.OpenKey(hive, sub) as k:
-                    val, _ = winreg.QueryValueEx(k, "Path")
+                    val, __ = winreg.QueryValueEx(k, "Path")
                     parts.append(os.path.expandvars(val))
             except OSError:
                 pass
@@ -55,6 +82,16 @@ __version__ = "0.1.0"
 STATE_FILE = Path.home() / ".ytdl_gui.json"
 CACHE_FILE = Path.home() / ".ytdl_gui_cache.json"
 LOG_FILE = Path.home() / ".ytdl_gui.log"
+THUMB_DIR = Path.home() / ".ytdl_gui_thumbs"
+THUMB_W, THUMB_H = 96, 54
+MAX_THUMBS = 600
+THUMB_WORKERS = 3
+WATCH_LIMIT = 30
+WATCH_SEEN_MAX = 300
+WATCH_NEW_MAX = 60
+HEIGHTS = [0, 2160, 1440, 1080, 720, 480]
+DEFAULT_FMT = {"height": 0, "subs": False, "sub_langs": "de,en", "chapters": False,
+               "channel_folder": False}
 RESULTS = 50
 POOL = 150
 CHANNEL_POOL = 300
@@ -66,11 +103,11 @@ BROWSERS = ["keine", "firefox", "chrome", "edge", "brave", "vivaldi", "opera", "
 COLUMNS = [
     ("pin", "★", 34, "center"),
     ("rank", "#", 40, "e"),
-    ("titel", "Titel", 410, "w"),
+    ("titel", "Titel", 330, "w"),
     ("kanal", "Kanal", 150, "w"),
     ("verif", "Status", 90, "w"),
     ("datum", "Upload", 90, "w"),
-    ("dauer", "Dauer", 65, "e"),
+    ("dauer", "Dauer", 82, "e"),
     ("aufrufe", "Aufrufe", 100, "e"),
 ]
 
@@ -115,6 +152,191 @@ HELP_TEXT = [
           "   Unten bei \"Cookies aus Browser\" einen Browser wählen, in dem du bei YouTube eingeloggt bist."),
     ("p", "Nur Inhalte herunterladen, die du herunterladen darfst."),
 ]
+
+
+HELP_TEXT_EN = [
+    ("h", "Quick guide"),
+    ("p", "1. Search\n"
+          "   Type a search term and press Enter. For a channel use @handle or the channel URL, "
+          "optionally followed by a filter word (e.g. @HSV training).\n"
+          "   Shift+Enter or \"No cache\" loads fresh from YouTube; otherwise the cache helps against rate limits."),
+    ("p", "2. Pick\n"
+          "   Click (Ctrl/Shift = several). Column headers sort. Del hides videos, "
+          "new results move up.\n"
+          "   Right click: download, more from this channel, block channel."),
+    ("p", "3. Download\n"
+          "   Double click or \"Download selection\". MKV = best quality, MP4 = more compatible, "
+          "audio = sound only. Downloads run in the queue (pause, cancel).\n"
+          "   Downloaded videos appear grey with ✓."),
+    ("p", "Pin and settings\n"
+          "   Space or a click on ☆ pins a video. Pinned videos stay on top and survive every "
+          "new search.\n"
+          "   \"Settings\" lets you choose columns, their order, thumbnails and the language. "
+          "The Status column shows a check mark for channels verified by YouTube."),
+    ("p", "4. Blocklist\n"
+          "   Shows blocked channels and hidden videos with timestamps, unblocking and the log."),
+    ("p", "5. YouTube bot check?\n"
+          "   Choose a browser at \"Cookies from browser\" in which you are signed in to YouTube."),
+    ("p", "Only download content you are allowed to download."),
+]
+
+TRANSLATIONS.update({
+    "live": "live",
+    "gerade eben": "just now",
+    "vor {n} Std": "{n} h ago",
+    "vor {n} Min": "{n} min ago",
+    "fertige Datei nicht gefunden oder leer": "finished file missing or empty",
+    "keine Antwort von yt-dlp": "no response from yt-dlp",
+    "falsche Video-ID ({a} statt {b})": "wrong video ID ({a} instead of {b})",
+    "Kurzanleitung": "Quick guide",
+    "Einstellungen": "Settings",
+    "Einstellungen…": "Settings…",
+    "Blockliste": "Blocklist",
+    "Blockliste…": "Blocklist…",
+    "Download-Optionen": "Download options",
+    "pausiert": "paused",
+    "Warteschlange": "Queue",
+    "Warteschlange…": "Queue…",
+    "Kanal wird hinzugefügt …": "Adding channel …",
+    "Beobachtete Kanäle": "Watched channels",
+    "Beobachtete Kanäle…": "Watched channels…",
+    "Neue Videos beobachteter Kanäle": "New videos from watched channels",
+    "Kanal {t}": "Channel {t}",
+    "Suche „{q}“": "Search “{q}”",
+    " · Filter „{f}“": " · filter “{f}”",
+    "Suchbegriff, @Kanal oder Kanal-URL eingeben und Enter drücken.":
+        "Enter a search term, @channel or channel URL and press Enter.",
+    "Herunterladen": "Download",
+    "Herunterladen mit Optionen…": "Download with options…",
+    "Kanal beobachten": "Watch channel",
+    "Merken/Merkung aufheben": "Pin/unpin",
+    "Mehr von diesem Kanal": "More from this channel",
+    "Video ausblenden/einblenden": "Hide/show video",
+    "Kanal blockieren": "Block channel",
+    "Video MKV (beste Qualität)": "Video MKV (best quality)",
+    "Video MP4": "Video MP4",
+    "Nur Audio": "Audio only",
+    "Gemerkte Videos": "Pinned videos",
+    "Systemcheck": "System check",
+    "Vorschaubilder anzeigen": "Show thumbnails",
+    "Die Sprache wird nach einem Neustart übernommen.": "The language changes after a restart.",
+    "Für diesen Kanal ist keine Kanal-ID bekannt. Nutze @handle oder die Kanal-URL.":
+        "No channel ID is known for this channel. Use @handle or the channel URL.",
+    "Kanal": "Channel",
+    "Kanal-ID": "Channel ID",
+    "Geblockt am": "Blocked on",
+    "Kanäle": "Channels",
+    "Video": "Video",
+    "Videos": "Videos",
+    "Ausgeblendet am": "Hidden on",
+    "Log": "Log",
+    "vor dem Logging": "before logging",
+    "unbekannt": "unknown",
+    "YouTube verlangt einen Bot-Check. Wähle unten einen Browser bei 'Cookies aus Browser' (Datum bleibt bis dahin leer).":
+        "YouTube asks for a bot check. Choose a browser at 'Cookies from browser' below (dates stay empty until then).",
+    "Hinweis": "Note",
+    "Bitte erst ein oder mehrere Videos auswählen.": "Please select one or more videos first.",
+    "Beste": "Best",
+    "Warteschlange: {d}/{t} fertig": "Queue: {d}/{t} done",
+    "wartet": "waiting",
+    "lädt": "downloading",
+    "fertig": "done",
+    "Fehler": "error",
+    "abgebrochen": "cancelled",
+    "Pause": "Pause",
+    "Fortsetzen": "Resume",
+    "Titel": "Title",
+    "Status": "Status",
+    "Fortschritt": "Progress",
+    "Info": "Info",
+    "Kanal wird bereits beobachtet.": "Channel is already being watched.",
+    "Neu": "New",
+    "Zuletzt geprüft": "Last checked",
+    "Bitte @handle oder eine Kanal-URL eingeben.": "Please enter an @handle or a channel URL.",
+    "Keine Kanäle in der Beobachtungsliste.": "No channels in the watch list.",
+    "Prüfung beendet: {n} neue Videos": "Check finished: {n} new videos",
+    ", {e} Fehler (siehe Log)": ", {e} errors (see log)",
+    "Keine neuen Videos. Erst „Alle prüfen“ ausführen.": "No new videos. Run “Check all” first.",
+    "gefunden": "found",
+    "fehlt (nötig zum Zusammenfügen von Video und Ton)": "missing (needed to merge video and audio)",
+    "fehlt (nötig für YouTube-Downloads)": "missing (needed for YouTube downloads)",
+    "Cookies: {b}. Gilt für Datum-Abruf und Downloads.": "Cookies: {b}. Applies to date lookup and downloads.",
+    "Kanal blockiert: ": "Channel blocked: ",
+    "{l} … lädt": "{l} … loading",
+    "{n} Videos": "{n} videos",
+    "Verarbeite …": "Processing …",
+    ", {f} fehlgeschlagen": ", {f} failed",
+    "Für diesen Kanal fehlt die Kanal-ID. Bitte über @handle hinzufügen.":
+        "The channel ID is missing for this channel. Please add it via @handle.",
+    "Prüfe {n} Kanal/Kanäle …": "Checking {n} channel(s) …",
+    "Suchen": "Search",
+    "Ohne Cache": "No cache",
+    "Ausgeblendete/Geblockte anzeigen": "Show hidden/blocked",
+    "Bereits geladene ausblenden": "Hide already downloaded",
+    "Merken (Leertaste)": "Pin (Space)",
+    "Video ausblenden/einblenden (Entf)": "Hide/show video (Del)",
+    "Ordner…": "Folder…",
+    "Cookies aus Browser:": "Cookies from browser:",
+    "Upload-Datum nachladen": "Fetch upload date",
+    "Datum erneut versuchen": "Retry dates",
+    "Hilfe": "Help",
+    "Dark Mode": "Dark mode",
+    "Auswahl herunterladen": "Download selection",
+    "Optionen…": "Options…",
+    "Version {v}": "version {v}",
+    "Beim Start anzeigen": "Show at startup",
+    "Los geht's": "Let's go",
+    "Fehlende Teile installiert setup.bat (im Installer-Ordner).": "setup.bat (in the installer folder) installs missing parts.",
+    "Angezeigte Spalten und Reihenfolge": "Visible columns and order",
+    "Nach oben": "Move up",
+    "Nach unten": "Move down",
+    "Ein/Aus": "On/off",
+    "Standard": "Default",
+    "Titel ist immer sichtbar. Doppelklick schaltet eine Spalte ein oder aus.":
+        "Title is always visible. Double click toggles a column.",
+    "Übernehmen": "Apply",
+    "Abbrechen": "Cancel",
+    "{n} Video(s) wieder eingeblendet.": "{n} video(s) shown again.",
+    "{n} Video(s) ausgeblendet, neue Treffer rücken nach.": "{n} video(s) hidden, new results move up.",
+    "Ausgewählte Kanäle entsperren": "Unblock selected channels",
+    "Ausgewählte Videos wieder einblenden": "Show selected videos again",
+    "Aktualisieren": "Refresh",
+    "(Titel unbekannt) [{v}]": "(title unknown) [{v}]",
+    "{l} · aus Cache ({a})": "{l} · from cache ({a})",
+    "{l} · frisch geladen": "{l} · freshly loaded",
+    "{note} · {n} sichtbar (Pool {p})": "{note} · {n} visible (pool {p})",
+    "Format": "Format",
+    "Max. Auflösung": "Max. resolution",
+    "Untertitel einbetten, Sprachen:": "Embed subtitles, languages:",
+    "Kapitel einbetten": "Embed chapters",
+    "Eigener Ordner pro Kanal": "Separate folder per channel",
+    "Als Standard speichern": "Save as default",
+    "Fertige entfernen": "Remove finished",
+    "Alle abbrechen": "Cancel all",
+    "Auswahl abbrechen": "Cancel selected",
+    "Kanal beobachtet: {n}": "Watching channel: {n}",
+    "Hinzufügen (@handle oder URL)": "Add (@handle or URL)",
+    "Alle prüfen": "Check all",
+    "Entfernen": "Remove",
+    "Neue Videos anzeigen": "Show new videos",
+    "(benötigt: pip install pillow)": "(requires: pip install pillow)",
+    "✔ verifiziert": "✔ verified",
+    "Fehler bei der Suche: {e}": "Search error: {e}",
+    " · Datum fehlt bei {m}": " · date missing for {m}",
+    "Lade Upload-Datum … {d}/{t}": "Loading upload dates … {d}/{t}",
+    "Prüfung fehlgeschlagen: {r}": "Verification failed: {r}",
+    "Kanal konnte nicht hinzugefügt werden: {e}": "Could not add channel: {e}",
+    "Datum bei {n} Video(s) nicht ladbar. Grund: {r}": "Date not loadable for {n} video(s). Reason: {r}",
+    "{n} Treffer sichtbar. Datum vollständig geladen.": "{n} results visible. All dates loaded.",
+    "unbekannt (siehe Log)": "unknown (see log)",
+    "Upload": "Upload",
+    "Dauer": "Duration",
+    "Aufrufe": "Views",
+    "Merken (★)": "Pin (★)",
+    "Rang (#)": "Rank (#)",
+    "Kanal-Status (verifiziert)": "Channel status (verified)",
+    "Upload-Datum": "Upload date",
+})
 
 
 def set_titlebar(win, dark):
@@ -165,7 +387,7 @@ def clean_text(s):
 
 def fmt_dur(sec):
     if not sec:
-        return "live"
+        return _("live")
     sec = int(sec)
     h, r = divmod(sec, 3600)
     m, s = divmod(r, 60)
@@ -187,10 +409,10 @@ def fmt_views(v):
 def age_text(ts):
     mins = int((time.time() - ts) / 60)
     if mins < 1:
-        return "gerade eben"
+        return _("gerade eben")
     if mins < 90:
-        return f"vor {mins} Min"
-    return f"vor {mins // 60} Std"
+        return _("vor {n} Min").format(n=mins)
+    return _("vor {n} Std").format(n=mins // 60)
 
 
 def is_bot_error(err):
@@ -216,7 +438,7 @@ def parse_query(query):
     if not m:
         q = query.strip()
         return {"kind": "search", "key": "s:" + q.lower(), "url": f"ytsearch{POOL}:{q}",
-                "term": "", "label": f"Suche „{q}“"}
+                "term": "", "label": _("Suche „{q}“").format(q=q)}
     target, term = m.group(1), m.group(2).strip()
     if target.startswith("@"):
         url = f"https://www.youtube.com/{target}/videos"
@@ -225,7 +447,7 @@ def parse_query(query):
         if (not re.search(r"/(videos|streams|shorts|playlists|search|featured)(/|\?|$)", url)
                 and "/watch" not in url and "/playlist" not in url):
             url += "/videos"
-    label = f"Kanal {target}" + (f" · Filter „{term}“" if term else "")
+    label = _("Kanal {t}").format(t=target) + (_(" · Filter „{f}“").format(f=term) if term else "")
     return {"kind": "channel", "key": f"c:{url}|{term.lower()}", "url": url,
             "term": term, "label": label}
 
@@ -246,11 +468,64 @@ def normalize(e, info):
     }
 
 
+class Cancelled(Exception):
+    pass
+
+
+def fetch_flat(url, limit=None, ydl_opts=None):
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "logger": QuietLogger()}
+    if ydl_opts and "cookiesfrombrowser" in ydl_opts:
+        opts["cookiesfrombrowser"] = ydl_opts["cookiesfrombrowser"]
+    if limit:
+        opts["playlistend"] = limit
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    entries = info.get("entries") or ([info] if info.get("id") else [])
+    return info, [e for e in entries if e and e.get("id")]
+
+
+def download_opts(base, outdir, mode, fmt, hook):
+    opts = dict(base)
+    folder = "%(channel)s/" if fmt.get("channel_folder") else ""
+    opts.update({
+        "outtmpl": str(outdir / (folder + "%(title).150B [%(id)s].%(ext)s")),
+        "noplaylist": True,
+        "windowsfilenames": True,
+        "retries": 10,
+        "fragment_retries": 10,
+        "concurrent_fragment_downloads": 4,
+        "progress_hooks": [hook],
+    })
+    pp = []
+    if mode == "audio":
+        opts["format"] = "bestaudio/best"
+        pp.append({"key": "FFmpegExtractAudio", "preferredcodec": "best"})
+    else:
+        h = int(fmt.get("height") or 0)
+        opts["format"] = f"bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/b" if h else "bv*+ba/b"
+        if mode == "mp4":
+            opts.update(format_sort=["res", "ext:mp4:m4a"], merge_output_format="mp4")
+        else:
+            opts["merge_output_format"] = "mkv"
+        if fmt.get("subs"):
+            langs = [x.strip() for x in str(fmt.get("sub_langs", "")).split(",") if x.strip()]
+            if langs:
+                opts["writesubtitles"] = True
+                opts["subtitleslangs"] = langs
+    if fmt.get("chapters"):
+        pp.append({"key": "FFmpegMetadata", "add_chapters": True, "add_metadata": True})
+    if mode != "audio" and opts.get("writesubtitles"):
+        pp.append({"key": "FFmpegEmbedSubtitle"})
+    if pp:
+        opts["postprocessors"] = pp
+    return opts
+
+
 def verify_download(info, vid, outdir):
     if not info:
-        return False, "keine Antwort von yt-dlp", ""
+        return False, _("keine Antwort von yt-dlp"), ""
     if info.get("id") != vid:
-        return False, f"falsche Video-ID ({info.get('id')} statt {vid})", ""
+        return False, _("falsche Video-ID ({a} statt {b})").format(a=info.get("id"), b=vid), ""
     paths = [d.get("filepath") for d in info.get("requested_downloads") or [] if d.get("filepath")]
     if not paths and info.get("filepath"):
         paths = [info["filepath"]]
@@ -258,11 +533,12 @@ def verify_download(info, vid, outdir):
         f = Path(p)
         if f.is_file() and f.stat().st_size > 0 and f"[{vid}]" in f.name and outdir.resolve() in f.resolve().parents:
             return True, "", str(f)
-    return False, "fertige Datei nicht gefunden oder leer", ""
+    return False, _("fertige Datei nicht gefunden oder leer"), ""
 
 
 class App(tk.Tk):
     def __init__(self):
+        global LANG
         super().__init__()
         self.title(f"ytpick {__version__}")
         self.set_icon()
@@ -282,6 +558,22 @@ class App(tk.Tk):
         vis = s.get("col_visible", DEFAULT_VISIBLE)
         self.col_visible = {k for k in vis if k in COLUMN_KEYS} | LOCKED_COLUMNS
         self.set_win = None
+        self.watch = st.get("watch", {})
+        self.fmt = {**DEFAULT_FMT, **s.get("fmt", {})}
+        self.lang_choice = s.get("lang", "auto")
+        LANG = detect_language(self.lang_choice)
+        self.title(f"ytpick {__version__}")
+        self.jobs = []
+        self.job_seq = 0
+        self.job_event = threading.Event()
+        self.paused = False
+        self.q_win = None
+        self.w_win = None
+        self.fmt_win = None
+        self.thumbs = {}
+        self.thumb_req = set()
+        self.thumbq = queue.Queue()
+        self.blank_thumb = None
 
         cache = load_json(CACHE_FILE, {})
         self.cache = {"searches": cache.get("searches", {}), "dates": cache.get("dates", {})}
@@ -310,9 +602,10 @@ class App(tk.Tk):
         self.fetch_dates = tk.BooleanVar(value=s.get("fetch_dates", True))
         self.dark = tk.BooleanVar(value=s.get("dark", True))
         self.show_readme = tk.BooleanVar(value=s.get("show_readme", True))
+        self.show_thumbs = tk.BooleanVar(value=bool(s.get("show_thumbs", False)) and HAVE_PIL)
         self.show_hidden = tk.BooleanVar(value=False)
         self.hide_downloaded = tk.BooleanVar(value=False)
-        self.status = tk.StringVar(value="Suchbegriff, @Kanal oder Kanal-URL eingeben und Enter drücken.")
+        self.status = tk.StringVar(value=_("Suchbegriff, @Kanal oder Kanal-URL eingeben und Enter drücken."))
 
         top = ttk.Frame(self, padding=8)
         top.pack(fill="x")
@@ -321,29 +614,34 @@ class App(tk.Tk):
         self.q.bind("<Return>", lambda e: self.do_search())
         self.q.bind("<Shift-Return>", lambda e: self.do_search(force=True))
         self.q.focus()
-        ttk.Button(top, text="Suchen", command=self.do_search).pack(side="left", padx=(6, 0))
-        ttk.Button(top, text="Ohne Cache", command=lambda: self.do_search(force=True)).pack(
+        ttk.Button(top, text=_("Suchen"), command=self.do_search).pack(side="left", padx=(6, 0))
+        ttk.Button(top, text=_("Ohne Cache"), command=lambda: self.do_search(force=True)).pack(
             side="left", padx=(6, 0))
 
         filt = ttk.Frame(self, padding=(8, 0))
         filt.pack(fill="x")
-        ttk.Checkbutton(filt, text="Ausgeblendete/Geblockte anzeigen", variable=self.show_hidden,
+        ttk.Checkbutton(filt, text=_("Ausgeblendete/Geblockte anzeigen"), variable=self.show_hidden,
                         command=self.render).pack(side="left")
-        ttk.Checkbutton(filt, text="Bereits geladene ausblenden", variable=self.hide_downloaded,
+        ttk.Checkbutton(filt, text=_("Bereits geladene ausblenden"), variable=self.hide_downloaded,
                         command=self.render).pack(side="left", padx=12)
-        ttk.Button(filt, text="Einstellungen…", command=self.open_settings).pack(side="right")
-        ttk.Button(filt, text="Blockliste…", command=self.open_blocklist).pack(side="right", padx=6)
-        ttk.Button(filt, text="Kanal blockieren", command=self.block_channels).pack(side="right")
-        ttk.Button(filt, text="Merken (Leertaste)", command=self.toggle_pin).pack(side="right", padx=6)
-        ttk.Button(filt, text="Video ausblenden/einblenden (Entf)",
+        tools = ttk.Frame(self, padding=(8, 4, 8, 0))
+        tools.pack(fill="x")
+        ttk.Button(tools, text=_("Warteschlange…"), command=self.open_queue).pack(side="left")
+        ttk.Button(tools, text=_("Beobachtete Kanäle…"), command=self.open_watch).pack(side="left", padx=6)
+        ttk.Button(tools, text=_("Blockliste…"), command=self.open_blocklist).pack(side="left")
+        ttk.Button(tools, text=_("Einstellungen…"), command=self.open_settings).pack(side="right")
+        ttk.Button(filt, text=_("Kanal blockieren"), command=self.block_channels).pack(side="right")
+        ttk.Button(filt, text=_("Merken (Leertaste)"), command=self.toggle_pin).pack(side="right", padx=6)
+        ttk.Button(filt, text=_("Video ausblenden/einblenden (Entf)"),
                    command=self.toggle_hide).pack(side="right")
 
         frame = ttk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8, pady=6)
         self.tree = ttk.Treeview(frame, columns=[c[0] for c in COLUMNS],
-                                 show="headings", selectmode="extended")
+                                 show="headings", selectmode="extended", height=6)
+        self.tree.column("#0", width=THUMB_W + 10, minwidth=THUMB_W + 10, stretch=False)
         for key, text, width, anchor in COLUMNS:
-            self.tree.heading(key, text=text, command=lambda k=key: self.sort_by(k))
+            self.tree.heading(key, text=_(text), command=lambda k=key: self.sort_by(k))
             self.tree.column(key, width=width, anchor=anchor, stretch=(key == "titel"))
         self.apply_columns()
         sb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
@@ -357,49 +655,57 @@ class App(tk.Tk):
         self.tree.bind("<Button-3>", self.on_context)
         self.tree.bind("<Button-2>", self.on_context)
         self.ctx = tk.Menu(self, tearoff=0)
-        self.ctx.add_command(label="Herunterladen", command=self.do_download)
-        self.ctx.add_command(label="Merken/Merkung aufheben", command=self.toggle_pin)
-        self.ctx.add_command(label="Mehr von diesem Kanal", command=self.more_from_channel)
+        self.ctx.add_command(label=_("Herunterladen"), command=self.do_download)
+        self.ctx.add_command(label=_("Herunterladen mit Optionen…"), command=self.do_download_options)
+        self.ctx.add_command(label=_("Kanal beobachten"), command=self.watch_selected_channel)
+        self.ctx.add_command(label=_("Merken/Merkung aufheben"), command=self.toggle_pin)
+        self.ctx.add_command(label=_("Mehr von diesem Kanal"), command=self.more_from_channel)
         self.ctx.add_separator()
-        self.ctx.add_command(label="Video ausblenden/einblenden", command=self.toggle_hide)
-        self.ctx.add_command(label="Kanal blockieren", command=self.block_channels)
+        self.ctx.add_command(label=_("Video ausblenden/einblenden"), command=self.toggle_hide)
+        self.ctx.add_command(label=_("Kanal blockieren"), command=self.block_channels)
         self.update_headings()
 
         opt = ttk.Frame(self, padding=(8, 4))
         opt.pack(fill="x")
-        for text, val in (("Video MKV (beste Qualität)", "mkv"),
-                          ("Video MP4", "mp4"), ("Nur Audio", "audio")):
+        for text, val in ((_("Video MKV (beste Qualität)"), "mkv"),
+                          (_("Video MP4"), "mp4"), (_("Nur Audio"), "audio")):
             ttk.Radiobutton(opt, text=text, value=val, variable=self.mode).pack(side="left", padx=4)
-        ttk.Button(opt, text="Ordner…", command=self.pick_dir).pack(side="right")
+        ttk.Button(opt, text=_("Ordner…"), command=self.pick_dir).pack(side="right")
         ttk.Entry(opt, textvariable=self.outdir, width=40).pack(side="right", padx=6)
 
         opt2 = ttk.Frame(self, padding=(8, 0))
         opt2.pack(fill="x")
-        ttk.Label(opt2, text="Cookies aus Browser:").pack(side="left")
+        ttk.Label(opt2, text=_("Cookies aus Browser:")).pack(side="left")
         cb = ttk.Combobox(opt2, textvariable=self.cookies, values=BROWSERS,
                           state="readonly", width=10)
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self.on_cookies_changed())
-        ttk.Checkbutton(opt2, text="Upload-Datum nachladen", variable=self.fetch_dates,
+        ttk.Checkbutton(opt2, text=_("Upload-Datum nachladen"), variable=self.fetch_dates,
                         command=self.on_fetch_dates_toggle).pack(side="left", padx=12)
-        ttk.Button(opt2, text="Datum erneut versuchen", command=self.retry_dates).pack(side="left")
-        ttk.Button(opt2, text="Hilfe", command=self.show_readme_dialog).pack(side="right")
-        ttk.Checkbutton(opt2, text="Dark Mode", variable=self.dark,
+        ttk.Button(opt2, text=_("Datum erneut versuchen"), command=self.retry_dates).pack(side="left")
+        ttk.Button(opt2, text=_("Hilfe"), command=self.show_readme_dialog).pack(side="right")
+        ttk.Checkbutton(opt2, text=_("Dark Mode"), variable=self.dark,
                         command=self.on_theme_toggle).pack(side="right", padx=10)
 
         bot = ttk.Frame(self, padding=8)
         bot.pack(fill="x")
         ttk.Label(bot, textvariable=self.status).pack(side="left")
-        ttk.Button(bot, text="Auswahl herunterladen", command=self.do_download).pack(side="right")
+        ttk.Button(bot, text=_("Auswahl herunterladen"), command=self.do_download).pack(side="right")
+        ttk.Button(bot, text=_("Optionen…"), command=self.do_download_options).pack(side="right", padx=6)
 
         self.apply_theme()
-        for _ in range(DATE_WORKERS):
+        self.apply_thumbs()
+        for _i in range(DATE_WORKERS):
             threading.Thread(target=self._date_worker, daemon=True).start()
+        for _i in range(THUMB_WORKERS):
+            threading.Thread(target=self._thumb_worker, daemon=True).start()
+        threading.Thread(target=self._queue_worker, daemon=True).start()
+        self.prune_thumbs()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.refresh_disk()
         if self.pinned:
             self.token += 1
-            self._show([], self.token, "Gemerkte Videos")
+            self._show([], self.token, _("Gemerkte Videos"))
         if self.show_readme.get():
             self.after(400, self.show_readme_dialog)
 
@@ -415,11 +721,65 @@ class App(tk.Tk):
         except tk.TclError:
             pass
 
+    def row_height(self):
+        return THUMB_H + 6 if self.show_thumbs.get() else 22
+
+    def apply_thumbs(self):
+        on = self.show_thumbs.get()
+        self.tree.configure(show="tree headings" if on else "headings")
+        ttk.Style(self).configure("Treeview", rowheight=self.row_height())
+        if on:
+            self.ensure_thumbs()
+
+    def prune_thumbs(self):
+        try:
+            files = sorted(THUMB_DIR.glob("*.jpg"), key=lambda f: f.stat().st_mtime)
+            for f in files[:max(0, len(files) - MAX_THUMBS)]:
+                f.unlink()
+        except Exception:
+            pass
+
+    def ensure_thumbs(self):
+        if not (self.show_thumbs.get() and HAVE_PIL):
+            return
+        for it in self.shown:
+            if it["id"] not in self.thumb_req:
+                self.thumb_req.add(it["id"])
+                self.thumbq.put(it["id"])
+
+    def _thumb_worker(self):
+        while True:
+            vid = self.thumbq.get()
+            img = None
+            try:
+                path = THUMB_DIR / f"{vid}.jpg"
+                if not path.exists():
+                    THUMB_DIR.mkdir(parents=True, exist_ok=True)
+                    req = Request(f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
+                                  headers={"User-Agent": "Mozilla/5.0"})
+                    with urlopen(req, timeout=15) as r:
+                        data = r.read()
+                    path.write_bytes(data)
+                with Image.open(path) as im:
+                    img = ImageOps.fit(im.convert("RGB"), (THUMB_W, THUMB_H))
+            except Exception:
+                img = None
+            if img is not None:
+                self.after(0, lambda v=vid, i=img: self._set_thumb(v, i))
+
+    def _set_thumb(self, vid, img):
+        photo = ImageTk.PhotoImage(img)
+        self.thumbs[vid] = photo
+        if self.show_thumbs.get() and self.tree.exists(vid):
+            self.tree.item(vid, image=photo)
+
     def style_text(self, widget):
         p = self.pal
-        widget.configure(bg=p["field"], fg=p["fg"], insertbackground=p["fg"],
-                         selectbackground=p["sel"], selectforeground="#ffffff",
-                         relief="flat", highlightthickness=0, borderwidth=0)
+        widget.configure(bg=p["field"], fg=p["fg"], selectbackground=p["sel"],
+                         selectforeground="#ffffff", relief="flat", highlightthickness=0,
+                         borderwidth=0)
+        if isinstance(widget, tk.Text):
+            widget.configure(insertbackground=p["fg"])
 
     def theme_window(self, win):
         win.configure(bg=self.pal["bg"])
@@ -455,7 +815,7 @@ class App(tk.Tk):
         self.option_add("*TCombobox*Listbox.selectBackground", p["sel"])
         self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
         st.configure("Treeview", background=p["field"], fieldbackground=p["field"],
-                     foreground=p["fg"], rowheight=22, borderwidth=0)
+                     foreground=p["fg"], rowheight=self.row_height(), borderwidth=0)
         st.map("Treeview", background=[("selected", p["sel"])],
                foreground=[("selected", "#ffffff")])
         st.configure("Treeview.Heading", background=p["header"], foreground=p["fg"],
@@ -478,6 +838,9 @@ class App(tk.Tk):
             self.theme_window(self.bl_win)
             if self.bl_log:
                 self.style_text(self.bl_log)
+        for w in (self.q_win, self.w_win, self.fmt_win):
+            if w and w.winfo_exists():
+                self.theme_window(w)
         if self.set_win and self.set_win.winfo_exists():
             self.theme_window(self.set_win)
             self.style_text(self.set_list)
@@ -495,11 +858,11 @@ class App(tk.Tk):
     def system_check(self):
         return [
             ("ffmpeg", shutil.which("ffmpeg") is not None,
-             "gefunden" if shutil.which("ffmpeg") else "fehlt (nötig zum Zusammenfügen von Video und Ton)"),
+             _("gefunden") if shutil.which("ffmpeg") else _("fehlt (nötig zum Zusammenfügen von Video und Ton)")),
             ("deno", shutil.which("deno") is not None,
-             "gefunden" if shutil.which("deno") else "fehlt (nötig für YouTube-Downloads)"),
-            ("ytpick", True, f"Version {__version__}"),
-            ("yt-dlp", True, f"Version {YTDLP_VERSION}"),
+             _("gefunden") if shutil.which("deno") else _("fehlt (nötig für YouTube-Downloads)")),
+            ("ytpick", True, _("Version {v}").format(v=__version__)),
+            ("yt-dlp", True, _("Version {v}").format(v=YTDLP_VERSION)),
         ]
 
     def show_readme_dialog(self):
@@ -507,16 +870,16 @@ class App(tk.Tk):
             self.readme_win.lift()
             return
         win = tk.Toplevel(self)
-        win.title("Kurzanleitung")
+        win.title(_("Kurzanleitung"))
         win.geometry("700x600")
         win.transient(self)
         self.readme_win = win
 
         btns = ttk.Frame(win, padding=10)
         btns.pack(side="bottom", fill="x")
-        ttk.Checkbutton(btns, text="Beim Start anzeigen", variable=self.show_readme,
+        ttk.Checkbutton(btns, text=_("Beim Start anzeigen"), variable=self.show_readme,
                         command=self.save).pack(side="left")
-        ttk.Button(btns, text="Los geht's", command=win.destroy).pack(side="right")
+        ttk.Button(btns, text=_("Los geht's"), command=win.destroy).pack(side="right")
 
         text = tk.Text(win, wrap="word", padx=16, pady=12, font=("Segoe UI", 10), cursor="arrow")
         text.pack(fill="both", expand=True)
@@ -526,13 +889,13 @@ class App(tk.Tk):
         text.tag_configure("p", spacing3=10)
         text.tag_configure("ok")
         text.tag_configure("bad")
-        for tag, content in HELP_TEXT:
+        for tag, content in (HELP_TEXT_EN if LANG == "en" else HELP_TEXT):
             text.insert("end", content + "\n", tag)
-        text.insert("end", "Systemcheck\n", "sub")
+        text.insert("end", _("Systemcheck") + "\n", "sub")
         for name, ok, detail in self.system_check():
             text.insert("end", ("✓ " if ok else "✗ ") + f"{name}: {detail}\n", "ok" if ok else "bad")
-        if not all(ok for _, ok, _ in self.system_check()):
-            text.insert("end", "\nFehlende Teile installiert setup.bat (im Installer-Ordner).\n", "p")
+        if not all(ok for __, ok, ___ in self.system_check()):
+            text.insert("end", "\n" + _("Fehlende Teile installiert setup.bat (im Installer-Ordner).") + "\n", "p")
         text.configure(state="disabled")
         self.apply_theme()
 
@@ -542,6 +905,7 @@ class App(tk.Tk):
             "blocked_channels": self.blocked,
             "downloaded": sorted(self.history),
             "pinned": self.pinned,
+            "watch": self.watch,
             "settings": {
                 "col_order": self.col_order,
                 "col_visible": [k for k in self.col_order if k in self.col_visible],
@@ -551,6 +915,9 @@ class App(tk.Tk):
                 "fetch_dates": self.fetch_dates.get(),
                 "dark": self.dark.get(),
                 "show_readme": self.show_readme.get(),
+                "show_thumbs": self.show_thumbs.get(),
+                "lang": self.lang_choice,
+                "fmt": self.fmt,
             },
         }
         try:
@@ -576,11 +943,16 @@ class App(tk.Tk):
 
     def refresh_disk(self):
         ids = set()
+        root = Path(self.outdir.get()).expanduser()
         try:
-            for f in Path(self.outdir.get()).expanduser().iterdir():
-                m = re.search(r"\[([A-Za-z0-9_-]{11})\]", f.name)
-                if m:
-                    ids.add(m.group(1))
+            for dirpath, dirnames, filenames in os.walk(root):
+                depth = len(Path(dirpath).relative_to(root).parts)
+                if depth >= 1:
+                    dirnames[:] = []
+                for name in filenames:
+                    m = re.search(r"\[([A-Za-z0-9_-]{11})\]", name)
+                    if m:
+                        ids.add(m.group(1))
         except Exception:
             pass
         self.disk_ids = ids
@@ -601,7 +973,7 @@ class App(tk.Tk):
 
     def on_cookies_changed(self):
         self.save()
-        self.status.set(f"Cookies: {self.cookies.get()}. Gilt für Datum-Abruf und Downloads.")
+        self.status.set(_("Cookies: {b}. Gilt für Datum-Abruf und Downloads.").format(b=self.cookies.get()))
         self.retry_dates()
 
     def on_fetch_dates_toggle(self):
@@ -626,14 +998,16 @@ class App(tk.Tk):
             self.set_win.lift()
             return
         win = tk.Toplevel(self)
-        win.title("Einstellungen")
-        win.geometry("420x440")
+        win.title(_("Einstellungen"))
+        win.geometry("460x540")
         win.transient(self)
         self.set_win = win
         self.set_order = list(self.col_order)
         self.set_vis = set(self.col_visible)
+        self.set_thumbs = tk.BooleanVar(value=self.show_thumbs.get())
+        self.set_lang = tk.StringVar(value={"auto": "Auto", "de": "Deutsch", "en": "English"}[self.lang_choice])
 
-        ttk.Label(win, text="Angezeigte Spalten und Reihenfolge", padding=(12, 10, 12, 4)).pack(anchor="w")
+        ttk.Label(win, text=_("Angezeigte Spalten und Reihenfolge"), padding=(12, 10, 12, 4)).pack(anchor="w")
         body = ttk.Frame(win, padding=(12, 0))
         body.pack(fill="both", expand=True)
         lb = tk.Listbox(body, activestyle="none", exportselection=False, font=("Segoe UI", 10))
@@ -641,19 +1015,29 @@ class App(tk.Tk):
         self.set_list = lb
         side = ttk.Frame(body)
         side.pack(side="left", fill="y", padx=(10, 0))
-        ttk.Button(side, text="Nach oben", command=lambda: self.move_setting(-1)).pack(fill="x")
-        ttk.Button(side, text="Nach unten", command=lambda: self.move_setting(1)).pack(fill="x", pady=6)
-        ttk.Button(side, text="Ein/Aus", command=self.toggle_setting).pack(fill="x")
-        ttk.Button(side, text="Standard", command=self.reset_settings).pack(fill="x", pady=(18, 0))
+        ttk.Button(side, text=_("Nach oben"), command=lambda: self.move_setting(-1)).pack(fill="x")
+        ttk.Button(side, text=_("Nach unten"), command=lambda: self.move_setting(1)).pack(fill="x", pady=6)
+        ttk.Button(side, text=_("Ein/Aus"), command=self.toggle_setting).pack(fill="x")
+        ttk.Button(side, text=_("Standard"), command=self.reset_settings).pack(fill="x", pady=(18, 0))
         lb.bind("<Double-1>", lambda e: self.toggle_setting())
         lb.bind("<space>", lambda e: self.toggle_setting() or "break")
 
-        ttk.Label(win, text="Titel ist immer sichtbar. Doppelklick schaltet eine Spalte ein oder aus.",
+        ttk.Label(win, text=_("Titel ist immer sichtbar. Doppelklick schaltet eine Spalte ein oder aus."),
                   padding=(12, 8)).pack(anchor="w")
+        extra = ttk.Frame(win, padding=(12, 0))
+        extra.pack(fill="x")
+        thumb_cb = ttk.Checkbutton(extra, text=_("Vorschaubilder anzeigen"), variable=self.set_thumbs)
+        thumb_cb.grid(row=0, column=0, sticky="w")
+        if not HAVE_PIL:
+            thumb_cb.state(["disabled"])
+            ttk.Label(extra, text=_("(benötigt: pip install pillow)")).grid(row=0, column=1, sticky="w", padx=6)
+        ttk.Label(extra, text=_("Sprache / Language")).grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Combobox(extra, textvariable=self.set_lang, values=["Auto", "Deutsch", "English"],
+                     state="readonly", width=10).grid(row=1, column=1, sticky="w", padx=6, pady=(8, 0))
         btns = ttk.Frame(win, padding=12)
         btns.pack(fill="x")
-        ttk.Button(btns, text="Übernehmen", command=self.apply_settings).pack(side="right")
-        ttk.Button(btns, text="Abbrechen", command=win.destroy).pack(side="right", padx=6)
+        ttk.Button(btns, text=_("Übernehmen"), command=self.apply_settings).pack(side="right")
+        ttk.Button(btns, text=_("Abbrechen"), command=win.destroy).pack(side="right", padx=6)
         self.fill_setting_list(0)
         self.apply_theme()
 
@@ -662,7 +1046,7 @@ class App(tk.Tk):
         lb.delete(0, "end")
         for k in self.set_order:
             mark = "☑" if k in self.set_vis else "☐"
-            lb.insert("end", f"{mark}  {COLUMN_LABELS[k]}")
+            lb.insert("end", f"{mark}  {_(COLUMN_LABELS[k])}")
         lb.selection_set(select)
         lb.activate(select)
 
@@ -697,8 +1081,16 @@ class App(tk.Tk):
         self.col_order = list(self.set_order)
         self.col_visible = set(self.set_vis) | LOCKED_COLUMNS
         self.apply_columns()
+        self.show_thumbs.set(self.set_thumbs.get() and HAVE_PIL)
+        old_lang = self.lang_choice
+        self.lang_choice = {"Auto": "auto", "Deutsch": "de", "English": "en"}[self.set_lang.get()]
+        self.apply_theme()
+        self.apply_thumbs()
+        self.render()
         self.save()
         self.set_win.destroy()
+        if old_lang != self.lang_choice:
+            messagebox.showinfo("ytpick", _("Die Sprache wird nach einem Neustart übernommen."))
 
     def on_click(self, event):
         if self.tree.identify_region(event.x, event.y) != "cell":
@@ -732,11 +1124,11 @@ class App(tk.Tk):
         self.render()
 
     def update_headings(self):
-        for key, text, _, _ in COLUMNS:
+        for key, text, __, ___ in COLUMNS:
             arrow = ""
             if key == self.sort_col:
                 arrow = " ▼" if self.sort_rev else " ▲"
-            self.tree.heading(key, text=text + arrow)
+            self.tree.heading(key, text=_(text) + arrow)
 
     def sort_by(self, key):
         if self.sort_col == key:
@@ -794,9 +1186,12 @@ class App(tk.Tk):
             if dl:
                 tags.append("downloaded")
             prefix = ("⊘ " if (hid or blk) else "") + ("✓ " if dl else "")
-            self.tree.insert("", "end", iid=it["id"], tags=tags, values=(
+            extra = {}
+            if self.show_thumbs.get():
+                extra["image"] = self.thumbs.get(it["id"], self.blank_image())
+            self.tree.insert("", "end", iid=it["id"], tags=tags, **extra, values=(
                 "★" if it["id"] in self.pinned else "☆", it["rank"], prefix + it["title"],
-                it["channel"], "✔ verifiziert" if it.get("verified") else "",
+                it["channel"], _("✔ verifiziert") if it.get("verified") else "",
                 fmt_date(it["date"]), fmt_dur(it["duration"]), fmt_views(it["views"]),
             ))
         keep = [i for i in selected if self.tree.exists(i)]
@@ -804,6 +1199,12 @@ class App(tk.Tk):
             self.tree.selection_set(keep)
         self.shown = [r[0] for r in rows]
         self.ensure_dates()
+        self.ensure_thumbs()
+
+    def blank_image(self):
+        if self.blank_thumb is None:
+            self.blank_thumb = tk.PhotoImage(width=THUMB_W, height=THUMB_H)
+        return self.blank_thumb
 
     def set_status(self, text):
         self.after(0, lambda: self.status.set(text))
@@ -832,7 +1233,7 @@ class App(tk.Tk):
             return
         it = sel[0]
         if not it["channel_id"]:
-            self.status.set("Für diesen Kanal ist keine Kanal-ID bekannt. Nutze @handle oder die Kanal-URL.")
+            self.status.set(_("Für diesen Kanal ist keine Kanal-ID bekannt. Nutze @handle oder die Kanal-URL."))
             return
         self.q.delete(0, "end")
         self.q.insert(0, f"https://www.youtube.com/channel/{it['channel_id']}")
@@ -846,7 +1247,7 @@ class App(tk.Tk):
             for it in sel:
                 self.hidden.pop(it["id"], None)
                 log("UNHIDE video", f"{it['id']} | {it['title']} | {it['channel']}")
-            self.status.set(f"{len(sel)} Video(s) wieder eingeblendet.")
+            self.status.set(_("{n} Video(s) wieder eingeblendet.").format(n=len(sel)))
         else:
             n = 0
             for it in sel:
@@ -854,7 +1255,7 @@ class App(tk.Tk):
                     self.hidden[it["id"]] = {"title": it["title"], "channel": it["channel"], "at": now()}
                     log("HIDE video", f"{it['id']} | {it['title']} | {it['channel']}")
                     n += 1
-            self.status.set(f"{n} Video(s) ausgeblendet, neue Treffer rücken nach.")
+            self.status.set(_("{n} Video(s) ausgeblendet, neue Treffer rücken nach.").format(n=n))
         self.save()
         self.render()
 
@@ -872,7 +1273,7 @@ class App(tk.Tk):
         self.save()
         self.render()
         if names:
-            self.status.set("Kanal blockiert: " + ", ".join(dict.fromkeys(names)))
+            self.status.set(_("Kanal blockiert: ") + ", ".join(dict.fromkeys(names)))
 
     def open_blocklist(self):
         if self.bl_win and self.bl_win.winfo_exists():
@@ -880,7 +1281,7 @@ class App(tk.Tk):
             self.refresh_blocklist()
             return
         win = tk.Toplevel(self)
-        win.title("Blockliste")
+        win.title(_("Blockliste"))
         win.geometry("820x500")
         nb = ttk.Notebook(win)
         nb.pack(fill="both", expand=True, padx=8, pady=8)
@@ -888,24 +1289,24 @@ class App(tk.Tk):
         f1 = ttk.Frame(nb, padding=6)
         self.bl_ch = ttk.Treeview(f1, columns=("name", "key", "at"), show="headings",
                                   selectmode="extended")
-        for c, t, w in (("name", "Kanal", 280), ("key", "Kanal-ID", 250), ("at", "Geblockt am", 150)):
+        for c, t, w in (("name", _("Kanal"), 280), ("key", _("Kanal-ID"), 250), ("at", _("Geblockt am"), 150)):
             self.bl_ch.heading(c, text=t)
             self.bl_ch.column(c, width=w, anchor="w")
         self.bl_ch.pack(fill="both", expand=True)
-        ttk.Button(f1, text="Ausgewählte Kanäle entsperren",
+        ttk.Button(f1, text=_("Ausgewählte Kanäle entsperren"),
                    command=self.unblock_channels).pack(anchor="e", pady=(6, 0))
-        nb.add(f1, text="Kanäle")
+        nb.add(f1, text=_("Kanäle"))
 
         f2 = ttk.Frame(nb, padding=6)
         self.bl_vid = ttk.Treeview(f2, columns=("title", "channel", "at"), show="headings",
                                    selectmode="extended")
-        for c, t, w in (("title", "Video", 380), ("channel", "Kanal", 170), ("at", "Ausgeblendet am", 150)):
+        for c, t, w in (("title", _("Video"), 380), ("channel", _("Kanal"), 170), ("at", _("Ausgeblendet am"), 150)):
             self.bl_vid.heading(c, text=t)
             self.bl_vid.column(c, width=w, anchor="w")
         self.bl_vid.pack(fill="both", expand=True)
-        ttk.Button(f2, text="Ausgewählte Videos wieder einblenden",
+        ttk.Button(f2, text=_("Ausgewählte Videos wieder einblenden"),
                    command=self.unhide_videos).pack(anchor="e", pady=(6, 0))
-        nb.add(f2, text="Videos")
+        nb.add(f2, text=_("Videos"))
 
         f3 = ttk.Frame(nb, padding=6)
         self.bl_log = tk.Text(f3, wrap="none", state="disabled", height=10)
@@ -913,9 +1314,9 @@ class App(tk.Tk):
         self.bl_log.configure(yscrollcommand=lsb.set)
         self.bl_log.pack(side="left", fill="both", expand=True)
         lsb.pack(side="right", fill="y")
-        nb.add(f3, text="Log")
+        nb.add(f3, text=_("Log"))
         self.bl_win = win
-        ttk.Button(win, text="Aktualisieren", command=self.refresh_blocklist).pack(pady=(0, 8))
+        ttk.Button(win, text=_("Aktualisieren"), command=self.refresh_blocklist).pack(pady=(0, 8))
         self.theme_window(win)
         self.style_text(self.bl_log)
         self.refresh_blocklist()
@@ -934,13 +1335,13 @@ class App(tk.Tk):
             h = self.hidden[v]
             title = h.get("title", "?")
             if title in ("?", ""):
-                title = f"(Titel unbekannt) [{v}]"
+                title = _("(Titel unbekannt) [{v}]").format(v=v)
             at = h.get("at", "?")
             if at in ("?", ""):
-                at = "vor dem Logging"
+                at = _("vor dem Logging")
             channel = h.get("channel", "?")
             if channel in ("?", ""):
-                channel = "unbekannt"
+                channel = _("unbekannt")
             self.bl_vid.insert("", "end", iid=str(i), values=(title, channel, at))
         try:
             lines = LOG_FILE.read_text(encoding="utf-8").splitlines()[-1000:]
@@ -980,9 +1381,10 @@ class App(tk.Tk):
         spec = parse_query(query)
         entry = self.cache["searches"].get(spec["key"])
         if entry and not force and time.time() - entry["at"] < CACHE_TTL:
-            self._show(entry["items"], self.token, f"{spec['label']} · aus Cache ({age_text(entry['at'])})")
+            self._show(entry["items"], self.token,
+                       _("{l} · aus Cache ({a})").format(l=spec["label"], a=age_text(entry["at"])))
             return
-        self.status.set(f"{spec['label']} … lädt")
+        self.status.set(_("{l} … lädt").format(l=spec["label"]))
         threading.Thread(target=self._search, args=(spec, self.token), daemon=True).start()
 
     def _search(self, spec, token):
@@ -1005,7 +1407,7 @@ class App(tk.Tk):
                 items.append(n)
         except Exception as err:
             log("SEARCH FAIL", f"{spec['key']} | {short_err(err, 200)}")
-            self.set_status(f"Fehler bei der Suche: {short_err(err)}")
+            self.set_status(_("Fehler bei der Suche: {e}").format(e=short_err(err)))
             return
         self.after(0, lambda: self._finish_search(spec, items, token))
 
@@ -1014,7 +1416,7 @@ class App(tk.Tk):
             self.cache["searches"][spec["key"]] = {"at": time.time(), "items": items}
             self.save_cache()
         if token == self.token:
-            self._show(items, token, f"{spec['label']} · frisch geladen")
+            self._show(items, token, _("{l} · frisch geladen").format(l=spec["label"]))
 
     def _show(self, raw_items, token, note):
         if token != self.token:
@@ -1052,8 +1454,8 @@ class App(tk.Tk):
         self.update_headings()
         self.render()
         missing = sum(1 for it in self.shown if it["date"] is None)
-        self.status.set(f"{note} · {len(self.shown)} sichtbar (Pool {len(self.items)})"
-                        + (f" · Datum fehlt bei {missing}" if missing and self.fetch_dates.get() else ""))
+        self.status.set(_("{note} · {n} sichtbar (Pool {p})").format(note=note, n=len(self.shown), p=len(self.items))
+                        + (_(" · Datum fehlt bei {m}").format(m=missing) if missing and self.fetch_dates.get() else ""))
 
     def ensure_dates(self):
         if not self.fetch_dates.get():
@@ -1104,88 +1506,450 @@ class App(tk.Tk):
         if self.tree.exists(it["id"]):
             self.tree.set(it["id"], "datum", fmt_date(d))
         if self.date_abort:
-            self.status.set("YouTube verlangt einen Bot-Check. Wähle unten einen Browser bei "
-                            "'Cookies aus Browser' (Datum bleibt bis dahin leer).")
+            self.status.set(_("YouTube verlangt einen Bot-Check. Wähle unten einen Browser bei "
+                              "'Cookies aus Browser' (Datum bleibt bis dahin leer)."))
         elif self.date_done >= self.date_total:
             if self.cache_dirty:
                 self.save_cache()
             if self.date_fail:
-                self.status.set(f"Datum bei {self.date_fail} Video(s) nicht ladbar. Grund: "
-                                f"{self.date_last_err or 'unbekannt (siehe Log)'}")
+                self.status.set(_("Datum bei {n} Video(s) nicht ladbar. Grund: {r}").format(
+                    n=self.date_fail, r=self.date_last_err or _("unbekannt (siehe Log)")))
             else:
-                self.status.set(f"{len(self.shown)} Treffer sichtbar. Datum vollständig geladen.")
+                self.status.set(_("{n} Treffer sichtbar. Datum vollständig geladen.").format(n=len(self.shown)))
             if self.sort_col == "datum":
                 self.render()
         else:
-            self.status.set(f"Lade Upload-Datum … {self.date_done}/{self.date_total}")
+            self.status.set(_("Lade Upload-Datum … {d}/{t}").format(d=self.date_done, t=self.date_total))
 
     def do_download(self):
         picked = self.selected_items()
         if not picked:
-            messagebox.showinfo("Hinweis", "Bitte erst ein oder mehrere Videos auswählen.")
+            messagebox.showinfo(_("Hinweis"), _("Bitte erst ein oder mehrere Videos auswählen."))
             return
-        threading.Thread(target=self._download, args=(picked,), daemon=True).start()
+        self.enqueue(picked, dict(self.fmt), self.mode.get())
 
-    def _download(self, picked):
-        outdir = Path(self.outdir.get()).expanduser()
-        outdir.mkdir(parents=True, exist_ok=True)
-        mode = self.mode.get()
-        opts = self.ydl_opts()
-        opts.update({
-            "outtmpl": str(outdir / "%(title).150B [%(id)s].%(ext)s"),
-            "noplaylist": True,
-            "windowsfilenames": True,
-            "retries": 10,
-            "fragment_retries": 10,
-            "concurrent_fragment_downloads": 4,
-            "progress_hooks": [self._hook],
-        })
-        if mode == "audio":
-            opts["format"] = "bestaudio/best"
-            opts["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "best"}]
-        elif mode == "mp4":
-            opts.update(format="bv*+ba/b", format_sort=["res", "ext:mp4:m4a"],
-                        merge_output_format="mp4")
-        else:
-            opts.update(format="bv*+ba/b", merge_output_format="mkv")
+    def do_download_options(self):
+        picked = self.selected_items()
+        if not picked:
+            messagebox.showinfo(_("Hinweis"), _("Bitte erst ein oder mehrere Videos auswählen."))
+            return
+        self.open_format_dialog(picked)
 
-        ok, failed, last_err = 0, 0, ""
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            for n, it in enumerate(picked, 1):
-                self.set_status(f"Lade {n}/{len(picked)}: {it['title'][:60]} …")
-                try:
-                    info = ydl.extract_info(it["url"], download=True)
-                    good, reason, path = verify_download(info, it["id"], outdir)
-                    if good:
-                        ok += 1
-                        self.history.add(it["id"])
-                        self.disk_ids.add(it["id"])
-                        log("DOWNLOAD", f"{it['id']} | {it['title']} | {it['channel']} | {path}")
-                        self.after(0, self.save)
-                        self.after(0, self.render)
-                    else:
-                        failed += 1
-                        last_err = f"Prüfung fehlgeschlagen: {reason}"
-                        log("VERIFY FAIL", f"{it['id']} | {reason}")
-                except Exception as err:
-                    failed += 1
-                    last_err = short_err(err, 200)
-                    log("DOWNLOAD FAIL", f"{it['id']} | {last_err}")
-        msg = f"Fertig: {ok} geladen"
-        if failed:
-            msg += f", {failed} fehlgeschlagen"
-            if is_bot_error(last_err):
-                msg += " (Bot-Check: bitte Browser bei 'Cookies' wählen)"
-            elif last_err:
-                msg += f" ({last_err[:100]})"
-        self.set_status(f"{msg}. Ordner: {outdir}")
+    def open_format_dialog(self, picked):
+        if self.fmt_win and self.fmt_win.winfo_exists():
+            self.fmt_win.destroy()
+        win = tk.Toplevel(self)
+        win.title(_("Download-Optionen"))
+        win.transient(self)
+        self.fmt_win = win
+        self.theme_window(win)
+        f = {**DEFAULT_FMT, **self.fmt}
+        v_mode = tk.StringVar(value=self.mode.get())
+        v_h = tk.StringVar(value=_("Beste") if not f["height"] else f"{f['height']}p")
+        v_subs = tk.BooleanVar(value=bool(f["subs"]))
+        v_langs = tk.StringVar(value=f["sub_langs"])
+        v_chap = tk.BooleanVar(value=bool(f["chapters"]))
+        v_fold = tk.BooleanVar(value=bool(f["channel_folder"]))
+        v_def = tk.BooleanVar(value=False)
 
-    def _hook(self, d):
+        body = ttk.Frame(win, padding=14)
+        body.pack(fill="both", expand=True)
+        title = picked[0]["title"] if len(picked) == 1 else _("{n} Videos").format(n=len(picked))
+        ttk.Label(body, text=title[:70], font=("Segoe UI", 10, "bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        ttk.Label(body, text=_("Format")).grid(row=1, column=0, sticky="w")
+        row = ttk.Frame(body)
+        row.grid(row=1, column=1, columnspan=2, sticky="w", pady=3)
+        for text, val in (("MKV", "mkv"), ("MP4", "mp4"), (_("Nur Audio"), "audio")):
+            ttk.Radiobutton(row, text=text, value=val, variable=v_mode).pack(side="left", padx=(0, 8))
+        ttk.Label(body, text=_("Max. Auflösung")).grid(row=2, column=0, sticky="w")
+        labels = [_("Beste") if h == 0 else f"{h}p" for h in HEIGHTS]
+        ttk.Combobox(body, textvariable=v_h, values=labels, state="readonly", width=10).grid(
+            row=2, column=1, sticky="w", pady=3)
+        ttk.Checkbutton(body, text=_("Untertitel einbetten, Sprachen:"), variable=v_subs).grid(
+            row=3, column=0, sticky="w", pady=3)
+        ttk.Entry(body, textvariable=v_langs, width=12).grid(row=3, column=1, sticky="w", padx=6)
+        ttk.Checkbutton(body, text=_("Kapitel einbetten"), variable=v_chap).grid(
+            row=4, column=0, columnspan=3, sticky="w", pady=3)
+        ttk.Checkbutton(body, text=_("Eigener Ordner pro Kanal"), variable=v_fold).grid(
+            row=5, column=0, columnspan=3, sticky="w", pady=3)
+        ttk.Checkbutton(body, text=_("Als Standard speichern"), variable=v_def).grid(
+            row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
+        def go():
+            label = v_h.get()
+            h = 0 if label == _("Beste") else int(label.rstrip("p"))
+            fmt = {"height": h, "subs": v_subs.get(), "sub_langs": v_langs.get().strip() or "de,en",
+                   "chapters": v_chap.get(), "channel_folder": v_fold.get()}
+            if v_def.get():
+                self.fmt = dict(fmt)
+                self.mode.set(v_mode.get())
+                self.save()
+            win.destroy()
+            self.enqueue(picked, fmt, v_mode.get())
+
+        btns = ttk.Frame(win, padding=(14, 0, 14, 14))
+        btns.pack(fill="x")
+        ttk.Button(btns, text=_("Herunterladen"), command=go).pack(side="right")
+        ttk.Button(btns, text=_("Abbrechen"), command=win.destroy).pack(side="right", padx=6)
+        win.bind("<Return>", lambda e: go())
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    def enqueue(self, picked, fmt, mode):
+        active = {j["item"]["id"] for j in self.jobs if j["status"] in ("queued", "running")}
+        base = self.ydl_opts()
+        outdir = str(Path(self.outdir.get()).expanduser())
+        added = 0
+        for it in picked:
+            if it["id"] in active:
+                continue
+            self.job_seq += 1
+            self.jobs.append({"n": self.job_seq, "item": it, "mode": mode, "fmt": dict(fmt),
+                              "outdir": outdir, "base": base, "status": "queued", "pct": 0.0,
+                              "speed": "", "msg": "", "cancel": False})
+            added += 1
+        if added:
+            log("QUEUE", f"{added} Video(s) hinzugefügt")
+            self.job_event.set()
+        self.open_queue()
+        self.update_queue_status()
+
+    def _queue_worker(self):
+        while True:
+            self.job_event.clear()
+            job = next((j for j in self.jobs if j["status"] == "queued"), None)
+            if job is None:
+                self.job_event.wait()
+                continue
+            while self.paused and not job["cancel"] and job["status"] == "queued":
+                time.sleep(0.3)
+            if job["status"] != "queued":
+                continue
+            self.run_job(job)
+            self.after(0, self.update_queue_status)
+
+    def run_job(self, job):
+        it = job["item"]
+        outdir = Path(job["outdir"])
+        job["status"] = "running"
+        try:
+            outdir.mkdir(parents=True, exist_ok=True)
+            opts = download_opts(job["base"], outdir, job["mode"], job["fmt"],
+                                 lambda d, j=job: self._hook(j, d))
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(it["url"], download=True)
+            good, reason, path = verify_download(info, it["id"], outdir)
+            if good:
+                job["status"], job["pct"], job["msg"] = "done", 100.0, Path(path).name
+                self.history.add(it["id"])
+                self.disk_ids.add(it["id"])
+                log("DOWNLOAD", f"{it['id']} | {it['title']} | {it['channel']} | {path}")
+                self.after(0, self.save)
+                self.after(0, self.render)
+            else:
+                job["status"], job["msg"] = "failed", _("Prüfung fehlgeschlagen: {r}").format(r=reason)
+                log("VERIFY FAIL", f"{it['id']} | {reason}")
+        except Cancelled:
+            job["status"], job["msg"] = "cancelled", ""
+            log("CANCEL", f"{it['id']} | {it['title']}")
+        except Exception as err:
+            if job["cancel"]:
+                job["status"], job["msg"] = "cancelled", ""
+            else:
+                job["status"], job["msg"] = "failed", short_err(err, 160)
+                log("DOWNLOAD FAIL", f"{it['id']} | {short_err(err, 200)}")
+
+    def _hook(self, job, d):
+        if job["cancel"]:
+            raise Cancelled()
+        while self.paused:
+            if job["cancel"]:
+                raise Cancelled()
+            time.sleep(0.3)
         if d.get("status") == "downloading":
-            self.set_status(f"Lädt … {d.get('_percent_str', '').strip()} "
-                            f"({d.get('_speed_str', '').strip()})")
+            total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            if total:
+                job["pct"] = min(100.0, (d.get("downloaded_bytes") or 0) * 100.0 / total)
+            sp = d.get("speed")
+            job["speed"] = f"{sp / 1048576:.1f} MB/s" if sp else ""
         elif d.get("status") == "finished":
-            self.set_status("Verarbeite (zusammenfügen) …")
+            job["pct"], job["speed"], job["msg"] = 100.0, "", _("Verarbeite …")
+
+    def update_queue_status(self):
+        total = len(self.jobs)
+        done = sum(1 for j in self.jobs if j["status"] in ("done", "failed", "cancelled"))
+        failed = sum(1 for j in self.jobs if j["status"] == "failed")
+        if not total:
+            return
+        text = _("Warteschlange: {d}/{t} fertig").format(d=done, t=total)
+        if failed:
+            text += _(", {f} fehlgeschlagen").format(f=failed)
+        self.status.set(text)
+
+    def job_state_text(self, j):
+        if j["status"] == "running" and self.paused:
+            return _("pausiert")
+        return {"queued": _("wartet"), "running": _("lädt"), "done": _("fertig"),
+                "failed": _("Fehler"), "cancelled": _("abgebrochen")}[j["status"]]
+
+    def open_queue(self):
+        if self.q_win and self.q_win.winfo_exists():
+            self.q_win.lift()
+            self.refresh_queue()
+            return
+        win = tk.Toplevel(self)
+        win.title(_("Warteschlange"))
+        win.geometry("760x380")
+        win.transient(self)
+        self.q_win = win
+        self.theme_window(win)
+        btns = ttk.Frame(win, padding=8)
+        btns.pack(side="bottom", fill="x")
+        self.q_bar = ttk.Progressbar(btns, mode="determinate", maximum=100, length=160)
+        self.q_bar.pack(side="left")
+        self.q_pause = ttk.Button(btns, text=_("Pause"), command=self.toggle_pause)
+        self.q_pause.pack(side="right")
+        ttk.Button(btns, text=_("Fertige entfernen"), command=self.clear_finished).pack(
+            side="right", padx=6)
+        ttk.Button(btns, text=_("Alle abbrechen"), command=lambda: self.cancel_jobs(all_jobs=True)).pack(
+            side="right")
+        ttk.Button(btns, text=_("Auswahl abbrechen"), command=self.cancel_jobs).pack(side="right", padx=6)
+        cols = ("titel", "status", "fortschritt", "info")
+        tv = ttk.Treeview(win, columns=cols, show="headings", selectmode="extended")
+        for key, text, w, a in (("titel", _("Titel"), 300, "w"), ("status", _("Status"), 80, "w"),
+                                ("fortschritt", _("Fortschritt"), 150, "w"), ("info", _("Info"), 190, "w")):
+            tv.heading(key, text=text)
+            tv.column(key, width=w, anchor=a, stretch=(key == "titel"))
+        tv.pack(fill="both", expand=True, padx=8, pady=(8, 0))
+        self.q_tree = tv
+        self.q_rows = {}
+        self.apply_theme()
+        self.queue_tick()
+
+    def queue_tick(self):
+        win = self.q_win
+        if not (win and win.winfo_exists()):
+            return
+        self.refresh_queue()
+        win.after(400, self.queue_tick)
+
+    def refresh_queue(self):
+        win = self.q_win
+        if not (win and win.winfo_exists()):
+            return
+        tv = self.q_tree
+        live = {str(j["n"]) for j in self.jobs}
+        for iid in list(tv.get_children()):
+            if iid not in live:
+                tv.delete(iid)
+        for j in self.jobs:
+            iid = str(j["n"])
+            filled = int(j["pct"] // 10)
+            bar = "█" * filled + "░" * (10 - filled) + f" {j['pct']:.0f} %"
+            info = j["speed"] or j["msg"]
+            vals = (j["item"]["title"], self.job_state_text(j), bar, info)
+            if tv.exists(iid):
+                tv.item(iid, values=vals)
+            else:
+                tv.insert("", "end", iid=iid, values=vals)
+        running = next((j for j in self.jobs if j["status"] == "running"), None)
+        self.q_bar["value"] = running["pct"] if running else 0
+        self.q_pause.configure(text=_("Fortsetzen") if self.paused else _("Pause"))
+
+    def toggle_pause(self):
+        self.paused = not self.paused
+        log("QUEUE", "pausiert" if self.paused else "fortgesetzt")
+        self.refresh_queue_once()
+
+    def refresh_queue_once(self):
+        if self.q_win and self.q_win.winfo_exists():
+            self.q_pause.configure(text=_("Fortsetzen") if self.paused else _("Pause"))
+
+    def cancel_jobs(self, all_jobs=False):
+        if all_jobs:
+            targets = list(self.jobs)
+        else:
+            sel = {int(i) for i in self.q_tree.selection()}
+            targets = [j for j in self.jobs if j["n"] in sel]
+        for j in targets:
+            if j["status"] == "queued":
+                j["status"] = "cancelled"
+            elif j["status"] == "running":
+                j["cancel"] = True
+        self.update_queue_status()
+
+    def clear_finished(self):
+        self.jobs[:] = [j for j in self.jobs if j["status"] in ("queued", "running")]
+        self.refresh_queue_once()
+        if self.q_win and self.q_win.winfo_exists():
+            for iid in list(self.q_tree.get_children()):
+                if iid not in {str(j["n"]) for j in self.jobs}:
+                    self.q_tree.delete(iid)
+
+    def watch_selected_channel(self):
+        picked = self.selected_items()
+        if not picked:
+            return
+        for it in picked:
+            if it.get("channel_id"):
+                self.add_watch(f"https://www.youtube.com/channel/{it['channel_id']}/videos", it["channel"])
+            else:
+                self.status.set(_("Für diesen Kanal fehlt die Kanal-ID. Bitte über @handle hinzufügen."))
+
+    def add_watch(self, url, name=""):
+        key = url.lower()
+        if key in self.watch:
+            self.status.set(_("Kanal wird bereits beobachtet."))
+            return
+        self.status.set(_("Kanal wird hinzugefügt …"))
+        threading.Thread(target=self._add_watch, args=(key, url, name), daemon=True).start()
+
+    def _add_watch(self, key, url, name):
+        try:
+            info, entries = fetch_flat(url, WATCH_LIMIT, self.ydl_opts())
+        except Exception as err:
+            log("WATCH FAIL", f"{url} | {short_err(err, 200)}")
+            self.set_status(_("Kanal konnte nicht hinzugefügt werden: {e}").format(e=short_err(err)))
+            return
+        title = clean_text(info.get("channel") or info.get("uploader") or info.get("title")) or name or url
+        ids = [e["id"] for e in entries]
+
+        def done():
+            self.watch[key] = {"name": title, "url": url, "seen": ids[:WATCH_SEEN_MAX], "new": [],
+                               "checked": time.time()}
+            log("WATCH", f"{title} | {url}")
+            self.save()
+            self.refresh_watch()
+            self.status.set(_("Kanal beobachtet: {n}").format(n=title))
+
+        self.after(0, done)
+
+    def open_watch(self):
+        if self.w_win and self.w_win.winfo_exists():
+            self.w_win.lift()
+            return
+        win = tk.Toplevel(self)
+        win.title(_("Beobachtete Kanäle"))
+        win.geometry("640x400")
+        win.transient(self)
+        self.w_win = win
+        self.theme_window(win)
+        top = ttk.Frame(win, padding=8)
+        top.pack(fill="x")
+        self.w_entry = ttk.Entry(top)
+        self.w_entry.pack(side="left", fill="x", expand=True)
+        self.w_entry.bind("<Return>", lambda e: self.add_watch_from_entry())
+        ttk.Button(top, text=_("Hinzufügen (@handle oder URL)"), command=self.add_watch_from_entry).pack(
+            side="left", padx=(6, 0))
+        btns = ttk.Frame(win, padding=8)
+        btns.pack(side="bottom", fill="x")
+        ttk.Button(btns, text=_("Alle prüfen"), command=self.check_watch).pack(side="left")
+        ttk.Button(btns, text=_("Entfernen"), command=self.remove_watch).pack(side="right")
+        ttk.Button(btns, text=_("Neue Videos anzeigen"), command=self.show_watch_new).pack(side="right", padx=6)
+        cols = ("kanal", "neu", "geprueft")
+        tv = ttk.Treeview(win, columns=cols, show="headings", selectmode="extended")
+        for key, text, w, a in (("kanal", _("Kanal"), 320, "w"), ("neu", _("Neu"), 70, "e"),
+                                ("geprueft", _("Zuletzt geprüft"), 170, "w")):
+            tv.heading(key, text=text)
+            tv.column(key, width=w, anchor=a, stretch=(key == "kanal"))
+        tv.pack(fill="both", expand=True, padx=8)
+        self.w_tree = tv
+        self.apply_theme()
+        self.refresh_watch()
+
+    def add_watch_from_entry(self):
+        spec = parse_query(self.w_entry.get())
+        if spec["kind"] != "channel":
+            self.status.set(_("Bitte @handle oder eine Kanal-URL eingeben."))
+            return
+        self.w_entry.delete(0, "end")
+        self.add_watch(spec["url"])
+
+    def refresh_watch(self):
+        if not (self.w_win and self.w_win.winfo_exists()):
+            return
+        tv = self.w_tree
+        tv.delete(*tv.get_children())
+        for key, w in self.watch.items():
+            checked = datetime.fromtimestamp(w["checked"]).strftime("%d.%m.%Y %H:%M") if w.get("checked") else "–"
+            tv.insert("", "end", iid=key, values=(w["name"], len(w.get("new", [])), checked))
+
+    def watch_keys(self, selected_only=False):
+        if selected_only:
+            return [k for k in self.w_tree.selection() if k in self.watch]
+        return list(self.watch)
+
+    def check_watch(self):
+        keys = self.watch_keys()
+        if not keys:
+            self.status.set(_("Keine Kanäle in der Beobachtungsliste."))
+            return
+        self.status.set(_("Prüfe {n} Kanal/Kanäle …").format(n=len(keys)))
+        threading.Thread(target=self._check_watch, args=(keys, self.ydl_opts()), daemon=True).start()
+
+    def _check_watch(self, keys, base):
+        total_new, errors = 0, 0
+        for n, key in enumerate(keys):
+            w = self.watch.get(key)
+            if not w:
+                continue
+            if n:
+                time.sleep(1.0)
+            try:
+                info, entries = fetch_flat(w["url"], WATCH_LIMIT, base)
+            except Exception as err:
+                errors += 1
+                log("WATCH FAIL", f"{w['url']} | {short_err(err, 200)}")
+                if is_bot_error(err):
+                    break
+                continue
+            seen = set(w["seen"])
+            known_new = {x["id"] for x in w.get("new", [])}
+            fresh = []
+            for e in entries:
+                if e["id"] in seen or e["id"] in known_new:
+                    continue
+                fresh.append(normalize(e, info))
+            w["new"] = (fresh + w.get("new", []))[:WATCH_NEW_MAX]
+            w["checked"] = time.time()
+            total_new += len(fresh)
+        msg = _("Prüfung beendet: {n} neue Videos").format(n=total_new)
+        if errors:
+            msg += _(", {e} Fehler (siehe Log)").format(e=errors)
+
+        def done():
+            self.save()
+            self.refresh_watch()
+            self.status.set(msg)
+
+        self.after(0, done)
+
+    def remove_watch(self):
+        keys = self.watch_keys(selected_only=True)
+        for k in keys:
+            w = self.watch.pop(k, {})
+            log("UNWATCH", f"{w.get('name', '?')} | {k}")
+        self.save()
+        self.refresh_watch()
+
+    def show_watch_new(self):
+        keys = self.watch_keys(selected_only=True) or self.watch_keys()
+        items = []
+        for k in keys:
+            items.extend(self.watch[k].get("new", []))
+        if not items:
+            self.status.set(_("Keine neuen Videos. Erst „Alle prüfen“ ausführen."))
+            return
+        for k in keys:
+            w = self.watch[k]
+            w["seen"] = ([x["id"] for x in w.get("new", [])] + w["seen"])[:WATCH_SEEN_MAX]
+            w["new"] = []
+        self.save()
+        self.refresh_watch()
+        self.token += 1
+        self.date_abort = False
+        self.date_total = self.date_done = self.date_fail = 0
+        self._show(items, self.token, _("Neue Videos beobachteter Kanäle"))
 
 
 def main(argv=None):
