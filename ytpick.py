@@ -527,9 +527,13 @@ def download_opts(base, outdir, mode, fmt, hook):
         "progress_hooks": [hook],
     })
     pp = []
-    if mode == "audio":
+    if mode in ("audio", "mp3"):
         opts["format"] = "bestaudio/best"
-        pp.append({"key": "FFmpegExtractAudio", "preferredcodec": "best"})
+        if mode == "mp3":
+            pp.append({"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "0"})
+            pp.append({"key": "FFmpegMetadata", "add_metadata": True})
+        else:
+            pp.append({"key": "FFmpegExtractAudio", "preferredcodec": "best"})
     else:
         h = int(fmt.get("height") or 0)
         opts["format"] = f"bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/b" if h else "bv*+ba/b"
@@ -542,9 +546,9 @@ def download_opts(base, outdir, mode, fmt, hook):
             if langs:
                 opts["writesubtitles"] = True
                 opts["subtitleslangs"] = langs
-    if fmt.get("chapters"):
+    if fmt.get("chapters") and mode != "mp3":
         pp.append({"key": "FFmpegMetadata", "add_chapters": True, "add_metadata": True})
-    if mode != "audio" and opts.get("writesubtitles"):
+    if mode not in ("audio", "mp3") and opts.get("writesubtitles"):
         pp.append({"key": "FFmpegEmbedSubtitle"})
     if pp:
         opts["postprocessors"] = pp
@@ -698,7 +702,7 @@ class App(tk.Tk):
         opt = ttk.Frame(self, padding=(8, 4))
         opt.pack(fill="x")
         for text, val in ((_("Video MKV (beste Qualität)"), "mkv"),
-                          (_("Video MP4"), "mp4"), (_("Nur Audio"), "audio")):
+                          (_("Video MP4"), "mp4"), (_("Nur Audio"), "audio"), ("MP3", "mp3")):
             ttk.Radiobutton(opt, text=text, value=val, variable=self.mode).pack(side="left", padx=4)
         ttk.Button(opt, text=_("Ordner…"), command=self.pick_dir).pack(side="right")
         ttk.Entry(opt, textvariable=self.outdir, width=40).pack(side="right", padx=6)
@@ -1617,7 +1621,7 @@ class App(tk.Tk):
         ttk.Label(body, text=_("Format")).grid(row=1, column=0, sticky="w")
         row = ttk.Frame(body)
         row.grid(row=1, column=1, columnspan=2, sticky="w", pady=3)
-        for text, val in (("MKV", "mkv"), ("MP4", "mp4"), (_("Nur Audio"), "audio")):
+        for text, val in (("MKV", "mkv"), ("MP4", "mp4"), (_("Nur Audio"), "audio"), ("MP3", "mp3")):
             ttk.Radiobutton(row, text=text, value=val, variable=v_mode).pack(side="left", padx=(0, 8))
         ttk.Label(body, text=_("Max. Auflösung")).grid(row=2, column=0, sticky="w")
         labels = [_("Beste") if h == 0 else f"{h}p" for h in HEIGHTS]

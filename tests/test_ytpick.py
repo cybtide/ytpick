@@ -99,6 +99,13 @@ class DownloadOptionsTests(unittest.TestCase):
         self.assertEqual(o["format"], "bestaudio/best")
         self.assertNotIn("writesubtitles", o)
 
+    def test_mp3_mode(self):
+        o = self.opts(mode="mp3", subs=True, chapters=True)
+        self.assertEqual(o["format"], "bestaudio/best")
+        self.assertNotIn("writesubtitles", o)
+        extract = [p for p in o["postprocessors"] if p["key"] == "FFmpegExtractAudio"][0]
+        self.assertEqual(extract["preferredcodec"], "mp3")
+
     def test_mp4_merge(self):
         self.assertEqual(self.opts(mode="mp4")["merge_output_format"], "mp4")
 

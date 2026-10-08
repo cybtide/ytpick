@@ -29,7 +29,7 @@
 - Videos ausblenden, Kanäle blockieren; Blockliste mit Zeitstempel, Entsperren und Protokoll
 - Bereits geladene Videos werden erkannt und markiert; jede fertige Datei wird gegen die gewählte Video-ID geprüft
 - Cache für Suchergebnisse und Upload-Daten, schont die Abfragelimits von YouTube
-- Download als MKV (beste Qualität), MP4 oder nur Audio
+- Download als MKV (beste Qualität), MP4, MP3 oder nur Audio
 - Dark Mode, Kurzanleitung und Systemcheck beim Start
 - Anmeldung über die Cookies eines installierten Browsers
 - Oberfläche auf Deutsch und Englisch

@@ -29,7 +29,7 @@
 - Hide videos and block channels; blocklist with timestamps, unblocking and log
 - Already downloaded videos are recognised and marked; each finished file is checked against the selected video ID
 - Cache for search results and upload dates to stay within YouTube's rate limits
-- Download as MKV (best quality), MP4 or audio only
+- Download as MKV (best quality), MP4, MP3 or audio only
 - Sign-in through the cookies of an installed browser
 - Dark mode, quick guide and system check at startup
 - English and German interface
