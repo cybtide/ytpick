@@ -324,6 +324,7 @@ TRANSLATIONS.update({
     "Datum erneut versuchen": "Retry dates",
     "Hilfe": "Help",
     "Werkzeuge": "Tools",
+    "Warteschlange beim Start eines Downloads öffnen": "Open queue window when a download starts",
     "Filter": "Filters",
     "Dark Mode": "Dark mode",
     "Auswahl herunterladen": "Download selection",
@@ -890,6 +891,7 @@ class App(tk.Tk):
         self.name_preset = s.get("name_preset", "title") if s.get("name_preset") in NAME_PRESETS else "title"
         self.done_action = s.get("done_action", "sound") if s.get("done_action") in DONE_ACTIONS else "sound"
         self.watch_clipboard = bool(s.get("watch_clipboard", True))
+        self.open_queue_on_add = bool(s.get("open_queue_on_add", False))
         self.clip_last = ""
         self.clip_bar = None
         self.shutdown_win = None
@@ -1323,6 +1325,7 @@ class App(tk.Tk):
                 "name_preset": self.name_preset,
                 "done_action": self.done_action,
                 "watch_clipboard": self.watch_clipboard,
+                "open_queue_on_add": self.open_queue_on_add,
             },
         }
         try:
@@ -1419,7 +1422,7 @@ class App(tk.Tk):
             return
         win = tk.Toplevel(self)
         win.title(_("Einstellungen"))
-        win.geometry("620x800")
+        win.geometry("620x830")
         win.transient(self)
         self.set_win = win
         self.set_order = list(self.col_order)
@@ -1432,6 +1435,7 @@ class App(tk.Tk):
         self.set_name = tk.StringVar(value=_(NAME_PRESET_LABELS[self.name_preset]))
         self.set_done = tk.StringVar(value=_(DONE_ACTION_LABELS[self.done_action]))
         self.set_clip = tk.BooleanVar(value=self.watch_clipboard)
+        self.set_open_q = tk.BooleanVar(value=self.open_queue_on_add)
         self.set_lang = tk.StringVar(value={"auto": "Auto", "de": "Deutsch", "en": "English"}[self.lang_choice])
 
         ttk.Label(win, text=_("Angezeigte Spalten und Reihenfolge"), padding=(12, 10, 12, 4)).pack(anchor="w")
@@ -1487,6 +1491,8 @@ class App(tk.Tk):
                         command=self.on_fetch_dates_toggle).grid(row=8, column=0, sticky="w", pady=(8, 0))
         ttk.Checkbutton(extra, text=_("Dark Mode"), variable=self.dark,
                         command=self.on_theme_toggle).grid(row=9, column=0, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(extra, text=_("Warteschlange beim Start eines Downloads öffnen"),
+                        variable=self.set_open_q).grid(row=10, column=0, columnspan=2, sticky="w", pady=(8, 0))
         btns = ttk.Frame(win, padding=12)
         btns.pack(fill="x")
         ttk.Button(btns, text=_("Übernehmen"), command=self.apply_settings).pack(side="right")
@@ -1547,6 +1553,7 @@ class App(tk.Tk):
         self.name_preset = name_by_label.get(self.set_name.get(), "title")
         self.done_action = done_by_label.get(self.set_done.get(), "sound")
         self.watch_clipboard = self.set_clip.get()
+        self.open_queue_on_add = self.set_open_q.get()
         self.rate_mb = rate
         self.window_on = self.set_win_on.get()
         self.window_start = self.set_win_a.get().strip()
@@ -2247,7 +2254,8 @@ class App(tk.Tk):
         if picked:
             log("QUEUE", f"{len(picked)} Video(s) hinzugefügt")
             self.job_event.set()
-        self.open_queue()
+        if self.open_queue_on_add:
+            self.open_queue()
         self.update_queue_status()
 
     def in_schedule(self):

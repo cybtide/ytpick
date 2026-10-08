@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -394,7 +395,22 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(len(self.app.jobs), before + 2 - 1)
         self.app.history.discard(item["id"])
         self.app.paused = False
-        self.app.q_win.destroy()
+        if self.app.q_win:
+            self.app.q_win.destroy()
+
+    def test_queue_window_opens_only_when_enabled(self):
+        item = self.items()[0]
+        item["id"] = "queue_open_x"
+        self.app.open_queue_on_add = True
+        with mock.patch.object(self.app, "open_queue") as opened:
+            self.app.enqueue([item], dict(ytpick.DEFAULT_FMT), "mp3")
+        opened.assert_called_once()
+        self.app.open_queue_on_add = False
+        item2 = dict(item, id="queue_open_y")
+        with mock.patch.object(self.app, "open_queue") as opened:
+            self.app.enqueue([item2], dict(ytpick.DEFAULT_FMT), "mp3")
+        opened.assert_not_called()
+        self.app.cancel_jobs(all_jobs=True)
 
     def test_rate_limit_applied(self):
         self.show(self.items())
@@ -405,7 +421,8 @@ class GuiSmokeTests(unittest.TestCase):
         self.app.rate_mb = 0
         self.app.cancel_jobs(all_jobs=True)
         self.app.paused = False
-        self.app.q_win.destroy()
+        if self.app.q_win:
+            self.app.q_win.destroy()
 
     def test_search_history(self):
         self.app.q.delete(0, "end")
@@ -562,7 +579,8 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(len(self.app.jobs), before + 1)
         self.app.cancel_jobs(all_jobs=True)
         self.app.paused = False
-        self.app.q_win.destroy()
+        if self.app.q_win:
+            self.app.q_win.destroy()
 
 
 if __name__ == "__main__":
