@@ -5,12 +5,18 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ## [Unveröffentlicht]
 
+## [0.4.0] - 2026-10-08
+
 ### Hinzugefügt
 
 - `ytpick-cli` als installierbarer Befehl (pipx) mit Kanälen, Playlists, MP3, Clip-Download, Cover/Metadaten, Cookies, Tempolimit sowie `--pick`, `--all` und `--list` für Skripte; deutsch und englisch
 - Linux-Programmdateien (`ytpick` und `ytpick-cli` als `.tar.gz`) im Release; der Linux-Build läuft zusätzlich in der CI
 - Knopf „Mehr anzeigen (+50)“ blendet weitere Treffer ein und lädt bei leerem Pool automatisch 300 weitere Videos nach
 - Bei „0 sichtbar“ nennt die Statuszeile den Grund (ausgeblendet/geblockt, bereits geladen, Filter)
+
+### Geändert
+
+- Hilfetext: Hinweise zu Filtern und Cookies passen zum neuen Layout
 
 ## [0.3.0] - 2026-10-08
 
