@@ -5,6 +5,8 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ## [Unveröffentlicht]
 
+## [0.2.0] - 2026-10-08
+
 ### Hinzugefügt
 
 - Programmsymbol für Fenster, Windows-Verknüpfung und README
