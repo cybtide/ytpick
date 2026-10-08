@@ -67,11 +67,16 @@ COLUMN_LABELS = {
 LOCKED_COLUMNS = {"titel"}
 DEFAULT_VISIBLE = ["pin", "titel", "kanal", "datum", "dauer"]
 
-DARK = {"bg": "#1e1f22", "panel": "#2b2d31", "field": "#25272b", "header": "#313338",
-        "fg": "#e3e5e8", "muted": "#9aa0a6", "sel": "#2f5fa8", "accent": "#4c8dff",
-        "border": "#3a3c41", "dl": "#7a7f87", "hid": "#5c6168", "ok": "#5fd37c", "bad": "#ff6b6b"}
-LIGHT = {"bg": "#f3f3f3", "panel": "#e6e6e6", "field": "#ffffff", "header": "#e1e1e1",
-         "fg": "#1b1b1b", "muted": "#666666", "sel": "#3b82f6", "accent": "#2563eb",
-         "border": "#c4c4c4", "dl": "#8a8a8a", "hid": "#b5b5b5", "ok": "#1a8f3c", "bad": "#c62828"}
+# Dunkles Schema "Kommandozentrale": ruhige, leicht bläuliche Flächen, ein Akzent.
+# "bg" ist die Fläche der Tabelle und des Fensters, "bar" die der Leisten,
+# Rahmen sind unsichtbar (gleiche Farbe wie die Fläche).
+DARK = {"bg": "#14161c", "bar": "#181b22", "panel": "#222733", "field": "#1d212b",
+        "header": "#181b22", "fg": "#e6e9f0", "muted": "#9aa2b4", "sel": "#252c40",
+        "selfg": "#e6e9f0", "hover": "#2a3040", "accent": "#7aa2ff", "border": "#181b22",
+        "dl": "#6f7789", "hid": "#565d6e", "ok": "#5fd37c", "bad": "#ff6b6b"}
+LIGHT = {"bg": "#ffffff", "bar": "#f3f3f3", "panel": "#e6e6e6", "field": "#ffffff",
+         "header": "#f3f3f3", "fg": "#1b1b1b", "muted": "#666666", "sel": "#dbe7fd",
+         "selfg": "#1b1b1b", "hover": "#d6d6d6", "accent": "#2563eb", "border": "#f3f3f3",
+         "dl": "#8a8a8a", "hid": "#b5b5b5", "ok": "#1a8f3c", "bad": "#c62828"}
 VIDEO_MODES = ("mkv", "mp4")
 MUSIC_MODES = ("mp3", "audio")

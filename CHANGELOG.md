@@ -7,6 +7,7 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ### Geändert
 
+- Neues dunkles Farbschema „Kommandozentrale“: ruhige, leicht bläuliche Flächen mit einem hellblauen Akzent, flache Buttons und Eingabefelder ohne Rahmen, höhere Zeilen, gedämpfte Tabellenköpfe; das helle Schema bekommt dieselbe flache Optik
 - Quellcode in das Paket `ytpick/` aufgeteilt (Konstanten, Übersetzungen, Hilfsfunktionen, yt-dlp-Teil und die Fenster-Teile als eigene Module); Start über `ytpick_gui.py`, `python -m ytpick` oder den Befehl `ytpick`, Verhalten unverändert
 - README: ausführlicherer Hinweis zur Nutzung (privater Gebrauch, Verantwortung, Nutzungsbedingungen, Cookies)
 

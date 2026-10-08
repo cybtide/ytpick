@@ -35,7 +35,7 @@ class ThemeMixin:
             pass
 
     def row_height(self):
-        return THUMB_H + 6 if self.show_thumbs.get() else 22
+        return THUMB_H + 8 if self.show_thumbs.get() else 28
 
     def apply_thumbs(self):
         on = self.show_thumbs.get()
@@ -89,13 +89,13 @@ class ThemeMixin:
     def style_text(self, widget):
         p = self.pal
         widget.configure(bg=p["field"], fg=p["fg"], selectbackground=p["sel"],
-                         selectforeground="#ffffff", relief="flat", highlightthickness=0,
+                         selectforeground=p["selfg"], relief="flat", highlightthickness=0,
                          borderwidth=0)
         if isinstance(widget, tk.Text):
             widget.configure(insertbackground=p["fg"])
 
     def theme_window(self, win):
-        win.configure(bg=self.pal["bg"])
+        win.configure(bg=self.pal["bar"])
         set_titlebar(win, self.dark.get())
 
     def apply_theme(self):
@@ -103,54 +103,63 @@ class ThemeMixin:
         self.pal = p
         st = ttk.Style(self)
         st.theme_use("clam")
-        self.configure(bg=p["bg"])
-        st.configure(".", background=p["bg"], foreground=p["fg"], fieldbackground=p["field"],
-                     bordercolor=p["border"], lightcolor=p["bg"], darkcolor=p["bg"],
-                     troughcolor=p["panel"], focuscolor=p["bg"], insertcolor=p["fg"])
+        self.configure(bg=p["bar"])
+        st.configure(".", background=p["bar"], foreground=p["fg"], fieldbackground=p["field"],
+                     bordercolor=p["border"], lightcolor=p["bar"], darkcolor=p["bar"],
+                     troughcolor=p["bar"], focuscolor=p["bar"], insertcolor=p["fg"],
+                     relief="flat")
         st.configure("TButton", background=p["panel"], foreground=p["fg"],
-                     padding=(8, 3), borderwidth=1)
-        st.map("TButton", background=[("active", p["sel"]), ("pressed", p["sel"])],
-               foreground=[("disabled", p["muted"]), ("active", "#ffffff")])
+                     padding=(12, 5), borderwidth=0, relief="flat")
+        st.map("TButton", background=[("pressed", p["accent"]), ("active", p["hover"])],
+               foreground=[("disabled", p["muted"]), ("pressed", p["bg"])])
         for w in ("TCheckbutton", "TRadiobutton"):
-            st.configure(w, background=p["bg"], foreground=p["fg"])
-            st.map(w, background=[("active", p["bg"])],
+            st.configure(w, background=p["bar"], foreground=p["fg"])
+            st.map(w, background=[("active", p["bar"])],
                    indicatorcolor=[("selected", p["accent"]), ("!selected", p["field"])])
-        st.configure("TEntry", fieldbackground=p["field"], foreground=p["fg"], insertcolor=p["fg"])
+        st.configure("TEntry", fieldbackground=p["field"], foreground=p["fg"],
+                     insertcolor=p["fg"], padding=(6, 4), borderwidth=0)
         st.configure("TCombobox", fieldbackground=p["field"], background=p["panel"],
-                     foreground=p["fg"], arrowcolor=p["fg"],
+                     foreground=p["fg"], arrowcolor=p["muted"], padding=(6, 4), borderwidth=0,
                      selectbackground=p["field"], selectforeground=p["fg"])
         st.map("TCombobox", fieldbackground=[("readonly", p["field"])],
                foreground=[("readonly", p["fg"])],
                selectbackground=[("readonly", p["field"])],
-               selectforeground=[("readonly", p["fg"])])
+               selectforeground=[("readonly", p["fg"])],
+               background=[("active", p["hover"])])
         self.option_add("*TCombobox*Listbox.background", p["field"])
         self.option_add("*TCombobox*Listbox.foreground", p["fg"])
         self.option_add("*TCombobox*Listbox.selectBackground", p["sel"])
-        self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
-        st.configure("Treeview", background=p["field"], fieldbackground=p["field"],
-                     foreground=p["fg"], rowheight=self.row_height(), borderwidth=0)
+        self.option_add("*TCombobox*Listbox.selectForeground", p["selfg"])
+        st.configure("Treeview", background=p["bg"], fieldbackground=p["bg"],
+                     foreground=p["fg"], rowheight=self.row_height(), borderwidth=0,
+                     relief="flat")
+        st.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
         st.map("Treeview", background=[("selected", p["sel"])],
-               foreground=[("selected", "#ffffff")])
-        st.configure("Treeview.Heading", background=p["header"], foreground=p["fg"],
-                     relief="flat", padding=(6, 4))
-        st.map("Treeview.Heading", background=[("active", p["sel"])])
-        st.configure("TNotebook", background=p["bg"], borderwidth=0)
-        st.configure("TNotebook.Tab", background=p["panel"], foreground=p["fg"], padding=(12, 5))
+               foreground=[("selected", p["selfg"])])
+        st.configure("Treeview.Heading", background=p["bar"], foreground=p["muted"],
+                     relief="flat", borderwidth=0, padding=(8, 8))
+        st.map("Treeview.Heading", background=[("active", p["hover"])],
+               foreground=[("active", p["fg"])])
+        st.configure("TNotebook", background=p["bar"], borderwidth=0)
+        st.configure("TNotebook.Tab", background=p["bar"], foreground=p["muted"],
+                     padding=(14, 7), borderwidth=0)
         st.map("TNotebook.Tab", background=[("selected", p["sel"])],
-               foreground=[("selected", "#ffffff")])
-        st.configure("TScrollbar", background=p["header"], troughcolor=p["bg"],
-                     arrowcolor=p["fg"], bordercolor=p["bg"])
-        st.map("TScrollbar", background=[("active", p["sel"])])
+               foreground=[("selected", p["selfg"])])
+        st.configure("TScrollbar", background=p["panel"], troughcolor=p["bar"],
+                     arrowcolor=p["muted"], bordercolor=p["bar"], borderwidth=0)
+        st.map("TScrollbar", background=[("active", p["hover"])])
+        st.configure("TProgressbar", background=p["accent"], troughcolor=p["panel"],
+                     borderwidth=0)
 
         self.tree.tag_configure("downloaded", foreground=p["dl"])
         self.tree.tag_configure("hidden", foreground=p["hid"])
         self.tree.tag_configure("queued", foreground=p["accent"])
         for menu in (self.ctx, self.tool_menu):
-            menu.configure(bg=p["panel"], fg=p["fg"], activebackground=p["sel"],
-                           activeforeground="#ffffff", bd=0)
-        st.configure("TMenubutton", background=p["panel"], foreground=p["fg"], arrowcolor=p["fg"],
-                     padding=(8, 3))
-        st.map("TMenubutton", background=[("active", p["sel"])], foreground=[("active", "#ffffff")])
+            menu.configure(bg=p["panel"], fg=p["fg"], activebackground=p["hover"],
+                           activeforeground=p["fg"], bd=0)
+        st.configure("TMenubutton", background=p["panel"], foreground=p["fg"],
+                     arrowcolor=p["muted"], padding=(10, 5), borderwidth=0)
+        st.map("TMenubutton", background=[("active", p["hover"])])
         set_titlebar(self, self.dark.get())
         if self.bl_win and self.bl_win.winfo_exists():
             self.theme_window(self.bl_win)
