@@ -5,12 +5,14 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ## [Unveröffentlicht]
 
+## [0.3.0] - 2026-10-08
+
 ### Geändert
 
 - Aufgeräumtes Hauptfenster: seltene Funktionen im Menü „Werkzeuge“, Filter einklappbar (Markierung bei aktivem Filter)
 - Cookies, Upload-Datum und Dark Mode wandern in die Einstellungen
 - „Alle sichtbaren laden“ steht neben dem Download-Knopf
-- Das Warteschlangen-Fenster öffnet sich nicht mehr automatisch (abschaltbar in den Einstellungen wieder einschaltbar)
+- Das Warteschlangen-Fenster öffnet sich nicht mehr automatisch (in den Einstellungen wieder einschaltbar)
 - Weniger Standardspalten (Merken, Titel, Kanal, Upload, Dauer); gespeicherte Auswahl bleibt erhalten
 
 ## [0.2.0] - 2026-10-08
