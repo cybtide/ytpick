@@ -141,7 +141,7 @@ COLUMN_LABELS = {
     "aufrufe": "Aufrufe",
 }
 LOCKED_COLUMNS = {"titel"}
-DEFAULT_VISIBLE = ["pin", "rank", "titel", "kanal", "datum", "dauer", "aufrufe"]
+DEFAULT_VISIBLE = ["pin", "titel", "kanal", "datum", "dauer"]
 
 DARK = {"bg": "#1e1f22", "panel": "#2b2d31", "field": "#25272b", "header": "#313338",
         "fg": "#e3e5e8", "muted": "#9aa0a6", "sel": "#2f5fa8", "accent": "#4c8dff",
@@ -323,6 +323,8 @@ TRANSLATIONS.update({
     "Upload-Datum nachladen": "Fetch upload date",
     "Datum erneut versuchen": "Retry dates",
     "Hilfe": "Help",
+    "Werkzeuge": "Tools",
+    "Filter": "Filters",
     "Dark Mode": "Dark mode",
     "Auswahl herunterladen": "Download selection",
     "Optionen…": "Options…",
@@ -955,33 +957,34 @@ class App(tk.Tk):
         ttk.Button(top, text=_("Ohne Cache"), command=lambda: self.do_search(force=True)).pack(
             side="left", padx=(6, 0))
 
-        filt = ttk.Frame(self, padding=(8, 0))
-        filt.pack(fill="x")
-        ttk.Checkbutton(filt, text=_("Ausgeblendete/Geblockte anzeigen"), variable=self.show_hidden,
-                        command=self.render).pack(side="left")
-        ttk.Checkbutton(filt, text=_("Bereits geladene ausblenden"), variable=self.hide_downloaded,
-                        command=self.render).pack(side="left", padx=12)
         tools = ttk.Frame(self, padding=(8, 4, 8, 0))
         tools.pack(fill="x")
+        self.tools_frame = tools
+        self.filter_btn = ttk.Button(tools, command=self.toggle_filters)
+        self.filter_btn.pack(side="left")
+        wz = ttk.Menubutton(tools, text=_("Werkzeuge") + " ▾")
+        wz.pack(side="left", padx=6)
+        self.tool_menu = tk.Menu(wz, tearoff=0)
+        wz["menu"] = self.tool_menu
+        for label, cmd in ((_("Beobachtete Kanäle…"), self.open_watch), (_("Verlauf…"), self.open_history),
+                           (_("Statistik…"), self.open_stats), (_("Blockliste…"), self.open_blocklist),
+                           (None, None), (_("Datum erneut versuchen"), self.retry_dates),
+                           (_("Hilfe"), self.show_readme_dialog)):
+            if label is None:
+                self.tool_menu.add_separator()
+            else:
+                self.tool_menu.add_command(label=label, command=cmd)
         ttk.Button(tools, text=_("Warteschlange…"), command=self.open_queue).pack(side="left")
-        ttk.Button(tools, text=_("Beobachtete Kanäle…"), command=self.open_watch).pack(side="left", padx=6)
-        ttk.Button(tools, text=_("Verlauf…"), command=self.open_history).pack(side="left")
-        ttk.Button(tools, text=_("Statistik…"), command=self.open_stats).pack(side="left", padx=6)
-        ttk.Button(tools, text=_("Blockliste…"), command=self.open_blocklist).pack(side="left")
-        ttk.Button(tools, text=_("Alle sichtbaren laden"), command=self.enqueue_all).pack(side="left", padx=6)
         ttk.Button(tools, text=_("Einstellungen…"), command=self.open_settings).pack(side="right")
-        ttk.Button(filt, text=_("Kanal blockieren"), command=self.block_channels).pack(side="right")
-        ttk.Button(filt, text=_("Merken (Leertaste)"), command=self.toggle_pin).pack(side="right", padx=6)
-        ttk.Button(filt, text="+", width=3, command=self.new_pin_list).pack(side="right")
-        self.pin_box = ttk.Combobox(filt, textvariable=self.pin_view, state="readonly", width=14)
-        self.pin_box.pack(side="right", padx=(0, 4))
+        self.pin_box = ttk.Combobox(tools, textvariable=self.pin_view, state="readonly", width=14)
+        self.pin_box.pack(side="right", padx=(0, 12))
         self.pin_box.bind("<<ComboboxSelected>>", lambda e: self.sync_pins())
-        ttk.Label(filt, text=_("Merkliste:")).pack(side="right", padx=(12, 4))
-        ttk.Button(filt, text=_("Video ausblenden/einblenden (Entf)"),
-                   command=self.toggle_hide).pack(side="right")
+        ttk.Button(tools, text="+", width=3, command=self.new_pin_list).pack(side="right", padx=(0, 4))
+        ttk.Label(tools, text=_("Merkliste:")).pack(side="right", padx=(12, 4))
 
         fl = ttk.Frame(self, padding=(8, 4, 8, 0))
-        fl.pack(fill="x")
+        self.filter_frame = fl
+        self.filters_open = False
         ttk.Label(fl, text=_("Dauer (Min.) von")).pack(side="left")
         ttk.Entry(fl, textvariable=self.f_min, width=5).pack(side="left", padx=4)
         ttk.Label(fl, text=_("bis")).pack(side="left")
@@ -991,9 +994,16 @@ class App(tk.Tk):
                      state="readonly", width=9).pack(side="left")
         ttk.Checkbutton(fl, text=_("Nur verifizierte Kanäle"), variable=self.f_verified).pack(
             side="left", padx=12)
+        ttk.Checkbutton(fl, text=_("Ausgeblendete/Geblockte anzeigen"), variable=self.show_hidden,
+                        command=self.render).pack(side="left")
+        ttk.Checkbutton(fl, text=_("Bereits geladene ausblenden"), variable=self.hide_downloaded,
+                        command=self.render).pack(side="left", padx=12)
         ttk.Button(fl, text=_("Filter zurücksetzen"), command=self.reset_filters).pack(side="left")
         for v in (self.f_min, self.f_max, self.f_verified, self.f_range):
             v.trace_add("write", lambda *a: self.render())
+        for v in (self.f_min, self.f_max, self.f_verified, self.f_range, self.show_hidden, self.hide_downloaded):
+            v.trace_add("write", lambda *a: self.update_filter_label())
+        self.update_filter_label()
 
         frame = ttk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8, pady=6)
@@ -1035,25 +1045,12 @@ class App(tk.Tk):
         ttk.Button(opt, text=_("Ordner…"), command=self.pick_dir).pack(side="right")
         ttk.Entry(opt, textvariable=self.outdir, width=40).pack(side="right", padx=6)
 
-        opt2 = ttk.Frame(self, padding=(8, 0))
-        opt2.pack(fill="x")
-        ttk.Label(opt2, text=_("Cookies aus Browser:")).pack(side="left")
-        cb = ttk.Combobox(opt2, textvariable=self.cookies, values=BROWSERS,
-                          state="readonly", width=10)
-        cb.pack(side="left", padx=6)
-        cb.bind("<<ComboboxSelected>>", lambda e: self.on_cookies_changed())
-        ttk.Checkbutton(opt2, text=_("Upload-Datum nachladen"), variable=self.fetch_dates,
-                        command=self.on_fetch_dates_toggle).pack(side="left", padx=12)
-        ttk.Button(opt2, text=_("Datum erneut versuchen"), command=self.retry_dates).pack(side="left")
-        ttk.Button(opt2, text=_("Hilfe"), command=self.show_readme_dialog).pack(side="right")
-        ttk.Checkbutton(opt2, text=_("Dark Mode"), variable=self.dark,
-                        command=self.on_theme_toggle).pack(side="right", padx=10)
-
         bot = ttk.Frame(self, padding=8)
         bot.pack(fill="x")
         ttk.Label(bot, textvariable=self.status).pack(side="left")
         ttk.Button(bot, text=_("Auswahl herunterladen"), command=self.do_download).pack(side="right")
         ttk.Button(bot, text=_("Optionen…"), command=self.do_download_options).pack(side="right", padx=6)
+        ttk.Button(bot, text=_("Alle sichtbaren laden"), command=self.enqueue_all).pack(side="right")
 
         self.apply_theme()
         self.apply_thumbs()
@@ -1198,8 +1195,12 @@ class App(tk.Tk):
 
         self.tree.tag_configure("downloaded", foreground=p["dl"])
         self.tree.tag_configure("hidden", foreground=p["hid"])
-        self.ctx.configure(bg=p["panel"], fg=p["fg"], activebackground=p["sel"],
+        for menu in (self.ctx, self.tool_menu):
+            menu.configure(bg=p["panel"], fg=p["fg"], activebackground=p["sel"],
                            activeforeground="#ffffff", bd=0)
+        st.configure("TMenubutton", background=p["panel"], foreground=p["fg"], arrowcolor=p["fg"],
+                     padding=(8, 3))
+        st.map("TMenubutton", background=[("active", p["sel"])], foreground=[("active", "#ffffff")])
         set_titlebar(self, self.dark.get())
         if self.bl_win and self.bl_win.winfo_exists():
             self.theme_window(self.bl_win)
@@ -1393,6 +1394,21 @@ class App(tk.Tk):
                 it["queued"] = False
         self.render()
 
+    def toggle_filters(self):
+        self.filters_open = not self.filters_open
+        if self.filters_open:
+            self.filter_frame.pack(fill="x", after=self.tools_frame)
+        else:
+            self.filter_frame.pack_forget()
+        self.update_filter_label()
+
+    def update_filter_label(self):
+        active = bool(self.f_min.get().strip() or self.f_max.get().strip() or self.f_verified.get()
+                      or self.f_range.get() != _(DATE_RANGES[0][0]) or self.show_hidden.get()
+                      or self.hide_downloaded.get())
+        arrow = "▴" if self.filters_open else "▾"
+        self.filter_btn.configure(text=_("Filter") + (" •" if active else "") + " " + arrow)
+
     def apply_columns(self):
         show = [k for k in self.col_order if k in self.col_visible]
         self.tree.configure(displaycolumns=show)
@@ -1403,7 +1419,7 @@ class App(tk.Tk):
             return
         win = tk.Toplevel(self)
         win.title(_("Einstellungen"))
-        win.geometry("600x720")
+        win.geometry("620x800")
         win.transient(self)
         self.set_win = win
         self.set_order = list(self.col_order)
@@ -1463,6 +1479,14 @@ class App(tk.Tk):
                      state="readonly", width=22).grid(row=5, column=1, sticky="w", padx=6, pady=(8, 0))
         ttk.Checkbutton(extra, text=_("Zwischenablage auf YouTube-Links prüfen"), variable=self.set_clip).grid(
             row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(extra, text=_("Cookies aus Browser:")).grid(row=7, column=0, sticky="w", pady=(8, 0))
+        cb = ttk.Combobox(extra, textvariable=self.cookies, values=BROWSERS, state="readonly", width=10)
+        cb.grid(row=7, column=1, sticky="w", padx=6, pady=(8, 0))
+        cb.bind("<<ComboboxSelected>>", lambda e: self.on_cookies_changed())
+        ttk.Checkbutton(extra, text=_("Upload-Datum nachladen"), variable=self.fetch_dates,
+                        command=self.on_fetch_dates_toggle).grid(row=8, column=0, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(extra, text=_("Dark Mode"), variable=self.dark,
+                        command=self.on_theme_toggle).grid(row=9, column=0, sticky="w", pady=(8, 0))
         btns = ttk.Frame(win, padding=12)
         btns.pack(fill="x")
         ttk.Button(btns, text=_("Übernehmen"), command=self.apply_settings).pack(side="right")
