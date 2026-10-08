@@ -7,7 +7,7 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ### Hinzugefügt
 
-- Knopf „Mehr anzeigen (+50)“ blendet weitere Treffer aus dem Pool ein
+- Knopf „Mehr anzeigen (+50)“ blendet weitere Treffer ein und lädt bei leerem Pool automatisch 300 weitere Videos nach
 - Bei „0 sichtbar“ nennt die Statuszeile den Grund (ausgeblendet/geblockt, bereits geladen, Filter)
 
 ## [0.3.0] - 2026-10-08
