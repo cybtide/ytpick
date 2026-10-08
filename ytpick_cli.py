@@ -10,7 +10,7 @@ try:
 except ImportError:
     sys.exit("yt-dlp fehlt / yt-dlp is missing. pip install -U yt-dlp")
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 NAME_PRESETS = {
     "title": "%(title).150B [%(id)s]",

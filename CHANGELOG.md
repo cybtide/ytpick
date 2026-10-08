@@ -5,19 +5,19 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ## [Unveröffentlicht]
 
+## [0.5.0] - 2026-10-08
+
 ### Hinzugefügt
 
 - Update-Prüfung: Beim Start (höchstens einmal am Tag) fragt ytpick GitHub nach dem neuesten Release und zeigt bei einer neueren Version eine Hinweisleiste mit Link zur Download-Seite, „Später“ und „Diese Version überspringen“; manuell unter „Werkzeuge → Nach Updates suchen“, abschaltbar in den Einstellungen
+- Videos in der Warteschlange sind in der Trefferliste markiert (⏳ wartet, ⬇ lädt), damit man sie nicht erneut anklickt
+- Tastatur: Strg+A markiert alle, Pfeiltasten und Umschalt+Pfeiltasten wählen aus, auch Pos1, Ende und Bild auf/ab; Pfeil nach unten im Suchfeld springt in die Liste, Strg+F aktiviert das Suchfeld
+- Ein paar kleine Überraschungen für bestimmte Suchbegriffe
 
 ### Geändert
 
 - README mit Kurzbeschreibung und neuem Screenshot; Beispiele im Hilfetext ohne Bezug auf einen bestimmten Kanal
 - Neues, schlichteres Programmsymbol (Pfeil nach unten auf blauem Grund), für kleine Größen einzeln gezeichnet und deshalb in der Taskleiste scharf; Windows ordnet das Fenster jetzt dem eigenen Symbol zu
-
-### Hinzugefügt
-
-- Videos in der Warteschlange sind in der Trefferliste markiert (⏳ wartet, ⬇ lädt), damit man sie nicht erneut anklickt
-- Tastatur: Strg+A markiert alle, Pfeiltasten und Umschalt+Pfeiltasten wählen aus, auch Pos1, Ende und Bild auf/ab; Pfeil nach unten im Suchfeld springt in die Liste, Strg+F aktiviert das Suchfeld
 
 ## [0.4.0] - 2026-10-08
 
