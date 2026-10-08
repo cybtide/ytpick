@@ -24,3 +24,14 @@ jobs:
       - run: python -m pip install ".[thumbnails]"
       - run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: xvfb-run -a python -m unittest discover -s tests -v
+
+  build-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pyinstaller "yt-dlp[default]" pillow
+      - run: pyinstaller --noconfirm --onefile --windowed --name ytpick --icon assets/icon.ico --add-data "assets;assets" --collect-all yt_dlp --collect-all yt_dlp_ejs ytpick.py
+      - run: Test-Path dist/ytpick.exe

@@ -13,7 +13,7 @@ import tkinter as tk
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from urllib.request import Request, urlopen
 
 try:
@@ -96,6 +96,24 @@ DEFAULT_FMT = {"height": 0, "subs": False, "sub_langs": "de,en", "chapters": Fal
                "channel_folder": False, "embed": False, "cut_start": None, "cut_end": None}
 SAVED_FMT_KEYS = ("height", "subs", "sub_langs", "chapters", "channel_folder", "embed")
 DEFAULT_WINDOW = ("01:00", "06:00")
+FROZEN = bool(getattr(sys, "frozen", False))
+BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+HISTORY_MAX = 30
+SHUTDOWN_SECONDS = 60
+DEFAULT_PIN_LIST = "Merkliste"
+CLIP_RE = re.compile(r"^https?://(?:(?:www|m|music)\.)?(?:youtube\.com/\S+|youtu\.be/\S+)$")
+NAME_PRESETS = {
+    "title": "%(title).150B [%(id)s]",
+    "channel_title": "%(channel)s - %(title).150B [%(id)s]",
+    "rank_title": "{rank} - %(title).150B [%(id)s]",
+}
+NAME_PRESET_LABELS = {
+    "title": "Titel [ID]",
+    "channel_title": "Kanal - Titel [ID]",
+    "rank_title": "Nr. - Titel [ID]",
+}
+DONE_ACTIONS = ["none", "sound", "shutdown"]
+DONE_ACTION_LABELS = {"none": "Nichts", "sound": "Ton", "shutdown": "Ton und PC herunterfahren"}
 DATE_RANGES = [("alle", 0), ("7 Tage", 7), ("30 Tage", 30), ("1 Jahr", 365)]
 RESULTS = 50
 POOL = 150
@@ -150,7 +168,9 @@ HELP_TEXT = [
           "   Leertaste oder Klick auf ☆ merkt ein Video. Gemerkte Videos stehen oben und bleiben bei jeder "
           "neuen Suche erhalten.\n"
           "   Unter \"Einstellungen\" wählst du Spalten aus und legst ihre Reihenfolge fest. "
-          "Die Spalte Status zeigt ein Häkchen bei von YouTube verifizierten Kanälen."),
+          "Die Spalte Status zeigt ein Häkchen bei von YouTube verifizierten Kanälen.\n"
+          "   Mit der Merkliste oben sortierst du gemerkte Videos in eigene Listen. Kopierte YouTube-Links "
+          "bietet ytpick oben im Fenster an, das Suchfeld merkt sich deine letzten Suchen."),
     ("p", "Playlists, Filter, Ausschnitt\n"
           "   Eine Playlist-URL (youtube.com/playlist?list=...) lädt die ganze Playlist in die Liste, "
           "\"Alle sichtbaren laden\" legt sie in die Warteschlange. Filter nach Dauer, Zeitraum und "
@@ -185,7 +205,9 @@ HELP_TEXT_EN = [
           "   Space or a click on ☆ pins a video. Pinned videos stay on top and survive every "
           "new search.\n"
           "   \"Settings\" lets you choose columns, their order, thumbnails and the language. "
-          "The Status column shows a check mark for channels verified by YouTube."),
+          "The Status column shows a check mark for channels verified by YouTube.\n"
+          "   The pin list at the top sorts pinned videos into your own lists. Copied YouTube links "
+          "are offered at the top of the window, and the search box remembers your latest searches."),
     ("p", "Playlists, filters, clips\n"
           "   A playlist URL (youtube.com/playlist?list=...) loads the whole playlist into the list, "
           "\"Download all visible\" puts it in the queue. Filters for duration, period and verified "
@@ -411,6 +433,34 @@ TRANSLATIONS.update({
     "Blockierte Kanäle": "Blocked channels",
     "Ausgeblendete Videos": "Hidden videos",
     "Monate": "Months",
+    "Merkliste:": "Pin list:",
+    "Alle": "All",
+    "In Merkliste verschieben…": "Move to pin list…",
+    "In Merkliste verschieben": "Move to pin list",
+    "Neue Merkliste": "New pin list",
+    "Name der Merkliste:": "Name of the pin list:",
+    "Ignorieren": "Dismiss",
+    "Anzeigen": "Show",
+    "YouTube-Link in der Zwischenablage: {u}": "YouTube link in clipboard: {u}",
+    "Warteschlange fertig: {n} Download(s)": "Queue finished: {n} download(s)",
+    "Warteschlange fertig, aber es gab Fehler. Der PC wird nicht heruntergefahren.":
+        "Queue finished, but there were errors. The PC will not be shut down.",
+    "PC herunterfahren": "Shut down PC",
+    "Alle Downloads sind fertig. Der PC wird in {s} Sekunden heruntergefahren.":
+        "All downloads are finished. The PC will shut down in {s} seconds.",
+    "Herunterfahren fehlgeschlagen: {e}": "Shutdown failed: {e}",
+    "Dateiname": "File name",
+    "Titel [ID]": "Title [ID]",
+    "Kanal - Titel [ID]": "Channel - Title [ID]",
+    "Nr. - Titel [ID]": "No. - Title [ID]",
+    "Nach der Warteschlange": "After the queue",
+    "Nichts": "Nothing",
+    "Ton": "Sound",
+    "Ton und PC herunterfahren": "Sound and shut down PC",
+    "Zwischenablage auf YouTube-Links prüfen": "Check clipboard for YouTube links",
+    "Video {t}": "Video {t}",
+    "In der .exe ist yt-dlp fest eingebaut. Lade die neueste ytpick-Version von GitHub.":
+        "yt-dlp is built into the .exe. Download the latest ytpick version from GitHub.",
     "yt-dlp aktualisieren": "Update yt-dlp",
     "yt-dlp wird aktualisiert …": "Updating yt-dlp …",
     "Aktualisierung fehlgeschlagen: {e}": "Update failed: {e}",
@@ -623,6 +673,14 @@ def compute_stats(downloads, history, today=None):
     }
 
 
+def shutdown_command():
+    if sys.platform == "win32":
+        return ["shutdown", "/s", "/t", "0"]
+    if sys.platform == "darwin":
+        return ["osascript", "-e", 'tell application "System Events" to shut down']
+    return ["systemctl", "poweroff"]
+
+
 def open_path(path, reveal=False):
     path = str(path)
     try:
@@ -640,12 +698,15 @@ def open_path(path, reveal=False):
 
 
 def parse_query(query):
-    m = re.match(r"^(@\S+|https?://\S*youtube\.com/\S+)\s*(.*)$", query.strip())
+    m = re.match(r"^(@\S+|https?://(?:\S*youtube\.com|youtu\.be)/\S+)\s*(.*)$", query.strip())
     if not m:
         q = query.strip()
         return {"kind": "search", "key": "s:" + q.lower(), "url": f"ytsearch{POOL}:{q}",
                 "term": "", "label": _("Suche „{q}“").format(q=q)}
     target, term = m.group(1), m.group(2).strip()
+    if re.search(r"youtu\.be/|/watch\?|/shorts/|/live/|/embed/", target) and "list=" not in target:
+        return {"kind": "video", "key": f"v:{target}", "url": target, "term": "",
+                "label": _("Video {t}").format(t=target)}
     if target.startswith("@"):
         url = f"https://www.youtube.com/{target}/videos"
     else:
@@ -690,6 +751,8 @@ def installed_ytdlp_version():
 
 
 def upgrade_ytdlp():
+    if FROZEN:
+        raise RuntimeError(_("In der .exe ist yt-dlp fest eingebaut. Lade die neueste ytpick-Version von GitHub."))
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp[default]"]
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, creationflags=flags)
@@ -711,14 +774,19 @@ def fetch_flat(url, limit=None, ydl_opts=None):
     return info, [e for e in entries if e and e.get("id")]
 
 
-def download_opts(base, outdir, mode, fmt, hook):
+def name_template(fmt, rank=None):
+    template = NAME_PRESETS.get(fmt.get("name", "title"), NAME_PRESETS["title"])
+    return template.replace("{rank}", f"{int(rank or 0):02d}")
+
+
+def download_opts(base, outdir, mode, fmt, hook, rank=None):
     opts = dict(base)
     folder = "%(channel)s/" if fmt.get("channel_folder") else ""
     start, end = fmt.get("cut_start"), fmt.get("cut_end")
     cut = start is not None or end is not None
     suffix = " clip" if cut else ""
     opts.update({
-        "outtmpl": str(outdir / (folder + f"%(title).150B [%(id)s]{suffix}.%(ext)s")),
+        "outtmpl": str(outdir / (folder + name_template(fmt, rank) + f"{suffix}.%(ext)s")),
         "noplaylist": True,
         "windowsfilenames": True,
         "retries": 10,
@@ -814,6 +882,15 @@ class App(tk.Tk):
         self.limit = RESULTS
         self.h_win = None
         self.s_win = None
+        self.pin_view = None
+        self.search_hist = [q for q in st.get("search_history", []) if isinstance(q, str)][:HISTORY_MAX]
+        self.pin_lists = set(st.get("pin_lists", []))
+        self.name_preset = s.get("name_preset", "title") if s.get("name_preset") in NAME_PRESETS else "title"
+        self.done_action = s.get("done_action", "sound") if s.get("done_action") in DONE_ACTIONS else "sound"
+        self.watch_clipboard = bool(s.get("watch_clipboard", True))
+        self.clip_last = ""
+        self.clip_bar = None
+        self.shutdown_win = None
         self.lang_choice = s.get("lang", "auto")
         LANG = detect_language(self.lang_choice)
         self.title(f"ytpick {__version__}")
@@ -861,13 +938,15 @@ class App(tk.Tk):
         self.f_max = tk.StringVar(value="")
         self.f_verified = tk.BooleanVar(value=False)
         self.f_range = tk.StringVar(value=_(DATE_RANGES[0][0]))
+        self.pin_view = tk.StringVar(value=_("Alle"))
         self.show_hidden = tk.BooleanVar(value=False)
         self.hide_downloaded = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value=_("Suchbegriff, @Kanal oder Kanal-URL eingeben und Enter drücken."))
 
         top = ttk.Frame(self, padding=8)
         top.pack(fill="x")
-        self.q = ttk.Entry(top)
+        self.top_frame = top
+        self.q = ttk.Combobox(top, values=self.search_hist)
         self.q.pack(side="left", fill="x", expand=True)
         self.q.bind("<Return>", lambda e: self.do_search())
         self.q.bind("<Shift-Return>", lambda e: self.do_search(force=True))
@@ -893,6 +972,11 @@ class App(tk.Tk):
         ttk.Button(tools, text=_("Einstellungen…"), command=self.open_settings).pack(side="right")
         ttk.Button(filt, text=_("Kanal blockieren"), command=self.block_channels).pack(side="right")
         ttk.Button(filt, text=_("Merken (Leertaste)"), command=self.toggle_pin).pack(side="right", padx=6)
+        ttk.Button(filt, text="+", width=3, command=self.new_pin_list).pack(side="right")
+        self.pin_box = ttk.Combobox(filt, textvariable=self.pin_view, state="readonly", width=14)
+        self.pin_box.pack(side="right", padx=(0, 4))
+        self.pin_box.bind("<<ComboboxSelected>>", lambda e: self.sync_pins())
+        ttk.Label(filt, text=_("Merkliste:")).pack(side="right", padx=(12, 4))
         ttk.Button(filt, text=_("Video ausblenden/einblenden (Entf)"),
                    command=self.toggle_hide).pack(side="right")
 
@@ -935,11 +1019,13 @@ class App(tk.Tk):
         self.ctx.add_command(label=_("Herunterladen mit Optionen…"), command=self.do_download_options)
         self.ctx.add_command(label=_("Kanal beobachten"), command=self.watch_selected_channel)
         self.ctx.add_command(label=_("Merken/Merkung aufheben"), command=self.toggle_pin)
+        self.ctx.add_command(label=_("In Merkliste verschieben…"), command=self.move_to_list)
         self.ctx.add_command(label=_("Mehr von diesem Kanal"), command=self.more_from_channel)
         self.ctx.add_separator()
         self.ctx.add_command(label=_("Video ausblenden/einblenden"), command=self.toggle_hide)
         self.ctx.add_command(label=_("Kanal blockieren"), command=self.block_channels)
         self.update_headings()
+        self.refresh_pin_lists()
 
         opt = ttk.Frame(self, padding=(8, 4))
         opt.pack(fill="x")
@@ -979,6 +1065,11 @@ class App(tk.Tk):
         self.prune_thumbs()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.refresh_disk()
+        try:
+            self.clip_last = self.clipboard_get().strip()
+        except tk.TclError:
+            self.clip_last = ""
+        self.after(1500, self.poll_clipboard)
         if self.pinned:
             self.token += 1
             self._show([], self.token, _("Gemerkte Videos"))
@@ -986,7 +1077,7 @@ class App(tk.Tk):
             self.after(400, self.show_readme_dialog)
 
     def set_icon(self):
-        assets = Path(__file__).resolve().parent / "assets"
+        assets = BASE_DIR / "assets"
         ico, png = assets / "icon.ico", assets / "icon.png"
         try:
             if sys.platform == "win32" and ico.exists():
@@ -1210,6 +1301,8 @@ class App(tk.Tk):
             "pinned": self.pinned,
             "watch": self.watch,
             "downloads": self.downloads,
+            "search_history": self.search_hist,
+            "pin_lists": sorted(self.pin_lists),
             "settings": {
                 "col_order": self.col_order,
                 "col_visible": [k for k in self.col_order if k in self.col_visible],
@@ -1226,6 +1319,9 @@ class App(tk.Tk):
                 "window_on": self.window_on,
                 "window_start": self.window_start,
                 "window_end": self.window_end,
+                "name_preset": self.name_preset,
+                "done_action": self.done_action,
+                "watch_clipboard": self.watch_clipboard,
             },
         }
         try:
@@ -1307,7 +1403,7 @@ class App(tk.Tk):
             return
         win = tk.Toplevel(self)
         win.title(_("Einstellungen"))
-        win.geometry("480x640")
+        win.geometry("600x720")
         win.transient(self)
         self.set_win = win
         self.set_order = list(self.col_order)
@@ -1317,6 +1413,9 @@ class App(tk.Tk):
         self.set_win_on = tk.BooleanVar(value=self.window_on)
         self.set_win_a = tk.StringVar(value=self.window_start)
         self.set_win_b = tk.StringVar(value=self.window_end)
+        self.set_name = tk.StringVar(value=_(NAME_PRESET_LABELS[self.name_preset]))
+        self.set_done = tk.StringVar(value=_(DONE_ACTION_LABELS[self.done_action]))
+        self.set_clip = tk.BooleanVar(value=self.watch_clipboard)
         self.set_lang = tk.StringVar(value={"auto": "Auto", "de": "Deutsch", "en": "English"}[self.lang_choice])
 
         ttk.Label(win, text=_("Angezeigte Spalten und Reihenfolge"), padding=(12, 10, 12, 4)).pack(anchor="w")
@@ -1356,6 +1455,14 @@ class App(tk.Tk):
         ttk.Entry(win_row, textvariable=self.set_win_a, width=6).pack(side="left")
         ttk.Label(win_row, text="–").pack(side="left", padx=4)
         ttk.Entry(win_row, textvariable=self.set_win_b, width=6).pack(side="left")
+        ttk.Label(extra, text=_("Dateiname")).grid(row=4, column=0, sticky="w", pady=(8, 0))
+        ttk.Combobox(extra, textvariable=self.set_name, values=[_(v) for v in NAME_PRESET_LABELS.values()],
+                     state="readonly", width=22).grid(row=4, column=1, sticky="w", padx=6, pady=(8, 0))
+        ttk.Label(extra, text=_("Nach der Warteschlange")).grid(row=5, column=0, sticky="w", pady=(8, 0))
+        ttk.Combobox(extra, textvariable=self.set_done, values=[_(v) for v in DONE_ACTION_LABELS.values()],
+                     state="readonly", width=22).grid(row=5, column=1, sticky="w", padx=6, pady=(8, 0))
+        ttk.Checkbutton(extra, text=_("Zwischenablage auf YouTube-Links prüfen"), variable=self.set_clip).grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
         btns = ttk.Frame(win, padding=12)
         btns.pack(fill="x")
         ttk.Button(btns, text=_("Übernehmen"), command=self.apply_settings).pack(side="right")
@@ -1411,6 +1518,11 @@ class App(tk.Tk):
                                  _("Ungültiger Wert bei Geschwindigkeit oder Zeitfenster (Format hh:mm)."),
                                  parent=self.set_win)
             return
+        name_by_label = {_(v): k for k, v in NAME_PRESET_LABELS.items()}
+        done_by_label = {_(v): k for k, v in DONE_ACTION_LABELS.items()}
+        self.name_preset = name_by_label.get(self.set_name.get(), "title")
+        self.done_action = done_by_label.get(self.set_done.get(), "sound")
+        self.watch_clipboard = self.set_clip.get()
         self.rate_mb = rate
         self.window_on = self.set_win_on.get()
         self.window_start = self.set_win_a.get().strip()
@@ -1440,6 +1552,77 @@ class App(tk.Tk):
                 self.set_pin([row])
                 return "break"
 
+    def pin_list_names(self):
+        names = {p.get("list") or DEFAULT_PIN_LIST for p in self.pinned.values()}
+        return sorted(names | self.pin_lists | {DEFAULT_PIN_LIST})
+
+    def refresh_pin_lists(self):
+        values = [_("Alle")] + self.pin_list_names()
+        self.pin_box.configure(values=values)
+        if self.pin_view.get() not in values:
+            self.pin_view.set(_("Alle"))
+
+    def in_view(self, vid):
+        p = self.pinned.get(vid)
+        if p is None:
+            return False
+        view = self.pin_view.get()
+        return view == _("Alle") or (p.get("list") or DEFAULT_PIN_LIST) == view
+
+    def target_list(self):
+        view = self.pin_view.get()
+        return DEFAULT_PIN_LIST if view == _("Alle") else view
+
+    def new_pin_list(self):
+        name = simpledialog.askstring(_("Neue Merkliste"), _("Name der Merkliste:"), parent=self)
+        name = (name or "").strip()
+        if name:
+            self.pin_lists.add(name)
+            self.refresh_pin_lists()
+            self.pin_view.set(name)
+            self.save()
+            self.sync_pins()
+
+    def move_to_list(self):
+        picked = self.selected_items()
+        if not picked:
+            return
+        name = simpledialog.askstring(_("In Merkliste verschieben"), _("Name der Merkliste:"),
+                                      initialvalue=self.target_list(), parent=self)
+        name = (name or "").strip()
+        if not name:
+            return
+        self.pin_lists.add(name)
+        for it in picked:
+            self.pinned[it["id"]] = {**self.snapshot(it), "list": name}
+        self.refresh_pin_lists()
+        self.save()
+        self.sync_pins()
+
+    @staticmethod
+    def snapshot(it):
+        return {k: it.get(k) for k in ("id", "title", "channel", "channel_id", "duration",
+                                       "views", "date", "verified")}
+
+    def pinned_item(self, vid, p):
+        return {
+            **{k: v for k, v in p.items() if k != "list"},
+            "rank": len(self.items) + 1,
+            "date": p.get("date") or self.cache["dates"].get(vid) or None,
+            "queued": False,
+            "from_pin": True,
+            "url": f"https://www.youtube.com/watch?v={vid}",
+        }
+
+    def sync_pins(self):
+        self.items = [it for it in self.items if not it.get("from_pin")]
+        have = {it["id"] for it in self.items}
+        for vid, p in self.pinned.items():
+            if vid not in have and self.in_view(vid):
+                self.items.append(self.pinned_item(vid, p))
+        self.by_id = {it["id"]: it for it in self.items}
+        self.render()
+
     def toggle_pin(self):
         ids = [it["id"] for it in self.selected_items()]
         if ids:
@@ -1450,13 +1633,12 @@ class App(tk.Tk):
         for i in ids:
             it = self.by_id[i]
             if mark:
-                self.pinned[i] = {k: it.get(k) for k in
-                                  ("id", "title", "channel", "channel_id", "duration",
-                                   "views", "date", "verified")}
+                self.pinned[i] = {**self.snapshot(it), "list": self.target_list()}
                 log("PIN", f"{i} | {it['title']} | {it['channel']}")
             else:
                 self.pinned.pop(i, None)
                 log("UNPIN", f"{i} | {it['title']} | {it['channel']}")
+        self.refresh_pin_lists()
         self.save()
         self.render()
 
@@ -1519,7 +1701,7 @@ class App(tk.Tk):
         if c == "kanal":
             return it["channel"].lower()
         if c == "pin":
-            return 0 if it["id"] in self.pinned else 1
+            return 0 if self.in_view(it["id"]) else 1
         if c == "verif":
             return 1 if it.get("verified") else 0
         if c == "datum":
@@ -1537,7 +1719,7 @@ class App(tk.Tk):
             hid = it["id"] in self.hidden
             blk = self.chan_key(it) in self.blocked
             dl = self.is_downloaded(it["id"])
-            pin = it["id"] in self.pinned
+            pin = self.in_view(it["id"])
             if not pin:
                 if (hid or blk) and not self.show_hidden.get():
                     continue
@@ -1551,7 +1733,7 @@ class App(tk.Tk):
                 kept.append(it["id"])
             rows.append((it, hid, blk, dl))
         rows.sort(key=lambda r: self.sort_key(r[0]), reverse=self.sort_rev)
-        rows.sort(key=lambda r: r[0]["id"] not in self.pinned)
+        rows.sort(key=lambda r: not self.in_view(r[0]["id"]))
         for it, hid, blk, dl in rows:
             tags = []
             if hid or blk:
@@ -1744,6 +1926,10 @@ class App(tk.Tk):
         self.refresh_blocklist()
         self.render()
 
+    def remember_query(self, query):
+        self.search_hist = ([query] + [x for x in self.search_hist if x != query])[:HISTORY_MAX]
+        self.q.configure(values=self.search_hist)
+
     def do_search(self, force=False):
         query = self.q.get().strip()
         if not query:
@@ -1752,6 +1938,7 @@ class App(tk.Tk):
         self.date_abort = False
         self.date_total = self.date_done = self.date_fail = 0
         spec = parse_query(query)
+        self.remember_query(query)
         entry = self.cache["searches"].get(spec["key"])
         if entry and not force and time.time() - entry["at"] < CACHE_TTL:
             self._show(entry["items"], self.token,
@@ -1817,14 +2004,8 @@ class App(tk.Tk):
                 "url": f"https://www.youtube.com/watch?v={vid}",
             })
         for vid, p in self.pinned.items():
-            if vid not in seen:
-                self.items.append({
-                    **p,
-                    "rank": len(self.items) + 1,
-                    "date": p.get("date") or self.cache["dates"].get(vid) or None,
-                    "queued": False,
-                    "url": f"https://www.youtube.com/watch?v={vid}",
-                })
+            if vid not in seen and self.in_view(vid):
+                self.items.append(self.pinned_item(vid, p))
         self.by_id = {it["id"]: it for it in self.items}
         self.save()
         self.refresh_disk()
@@ -2035,7 +2216,8 @@ class App(tk.Tk):
         outdir = str(Path(self.outdir.get()).expanduser())
         for it in picked:
             self.job_seq += 1
-            self.jobs.append({"n": self.job_seq, "item": it, "mode": mode, "fmt": dict(fmt),
+            self.jobs.append({"n": self.job_seq, "item": it, "mode": mode,
+                              "fmt": {**fmt, "name": self.name_preset},
                               "outdir": outdir, "base": base, "status": "queued", "pct": 0.0,
                               "speed": "", "msg": "", "cancel": False})
         if picked:
@@ -2070,6 +2252,7 @@ class App(tk.Tk):
                 continue
             self.run_job(job)
             self.after(0, self.update_queue_status)
+            self.after(0, self.on_queue_finished)
 
     def run_job(self, job):
         it = job["item"]
@@ -2078,7 +2261,7 @@ class App(tk.Tk):
         try:
             outdir.mkdir(parents=True, exist_ok=True)
             opts = download_opts(job["base"], outdir, job["mode"], job["fmt"],
-                                 lambda d, j=job: self._hook(j, d))
+                                 lambda d, j=job: self._hook(j, d), it.get("rank"))
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(it["url"], download=True)
             good, reason, path = verify_download(info, it["id"], outdir)
@@ -2253,6 +2436,104 @@ class App(tk.Tk):
                   "Cookies aus {b} verwenden? Du musst dort bei YouTube angemeldet sein.").format(b=name)):
             self.cookies.set(name)
             self.on_cookies_changed()
+
+    def poll_clipboard(self):
+        try:
+            if self.watch_clipboard and self.focus_displayof() is not None:
+                try:
+                    text = self.clipboard_get().strip()
+                except tk.TclError:
+                    text = ""
+                if text and text != self.clip_last and len(text) < 300 and CLIP_RE.match(text):
+                    self.clip_last = text
+                    self.show_clip_bar(text)
+        finally:
+            self.after(1500, self.poll_clipboard)
+
+    def show_clip_bar(self, url):
+        self.clip_url = url
+        if self.clip_bar is None:
+            bar = ttk.Frame(self, padding=(8, 4))
+            self.clip_label = ttk.Label(bar)
+            self.clip_label.pack(side="left", fill="x", expand=True)
+            ttk.Button(bar, text=_("Ignorieren"), command=self.hide_clip_bar).pack(side="right")
+            ttk.Button(bar, text=_("Anzeigen"), command=self.use_clip_url).pack(side="right", padx=6)
+            self.clip_bar = bar
+        self.clip_label.configure(text=_("YouTube-Link in der Zwischenablage: {u}").format(u=url[:70]))
+        self.clip_bar.pack(fill="x", before=self.top_frame)
+
+    def hide_clip_bar(self):
+        if self.clip_bar is not None:
+            self.clip_bar.pack_forget()
+
+    def use_clip_url(self):
+        self.q.delete(0, "end")
+        self.q.insert(0, self.clip_url)
+        self.hide_clip_bar()
+        self.do_search()
+
+    def beep(self):
+        try:
+            if sys.platform == "win32":
+                import winsound
+                winsound.MessageBeep()
+            else:
+                self.bell()
+        except Exception:
+            pass
+
+    def on_queue_finished(self):
+        if any(j["status"] in ("queued", "running") for j in self.jobs):
+            return
+        fresh = [j for j in self.jobs if j["status"] == "done" and not j.get("notified")]
+        if not fresh:
+            return
+        for j in fresh:
+            j["notified"] = True
+        failed = any(j["status"] == "failed" for j in self.jobs)
+        self.status.set(_("Warteschlange fertig: {n} Download(s)").format(n=len(fresh)))
+        if self.done_action in ("sound", "shutdown"):
+            self.beep()
+        if self.done_action == "shutdown":
+            if failed:
+                self.status.set(_("Warteschlange fertig, aber es gab Fehler. Der PC wird nicht heruntergefahren."))
+            else:
+                self.start_shutdown_countdown()
+
+    def start_shutdown_countdown(self):
+        if self.shutdown_win and self.shutdown_win.winfo_exists():
+            return
+        win = tk.Toplevel(self)
+        win.title(_("PC herunterfahren"))
+        win.transient(self)
+        self.shutdown_win = win
+        self.theme_window(win)
+        self.shutdown_left = SHUTDOWN_SECONDS
+        label = ttk.Label(win, padding=20)
+        label.pack()
+        ttk.Button(win, text=_("Abbrechen"), command=win.destroy).pack(pady=(0, 16))
+        self.shutdown_label = label
+
+        def tick():
+            if not win.winfo_exists():
+                return
+            if self.shutdown_left <= 0:
+                self.run_shutdown()
+                win.destroy()
+                return
+            label.configure(text=_("Alle Downloads sind fertig. Der PC wird in {s} Sekunden heruntergefahren.").format(
+                s=self.shutdown_left))
+            self.shutdown_left -= 1
+            win.after(1000, tick)
+
+        tick()
+
+    def run_shutdown(self):
+        log("SHUTDOWN", "queue finished")
+        try:
+            subprocess.Popen(shutdown_command())
+        except Exception as err:
+            self.status.set(_("Herunterfahren fehlgeschlagen: {e}").format(e=short_err(err)))
 
     def open_stats(self):
         if self.s_win and self.s_win.winfo_exists():

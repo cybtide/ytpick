@@ -169,6 +169,55 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(spec["url"], "https://www.youtube.com/playlist?list=PLabc123")
 
 
+class NamingTests(unittest.TestCase):
+    def test_presets_keep_id(self):
+        for key in ytpick.NAME_PRESETS:
+            self.assertIn("[%(id)s]", ytpick.name_template({"name": key}, 3))
+
+    def test_rank_preset(self):
+        self.assertTrue(ytpick.name_template({"name": "rank_title"}, 7).startswith("07 - "))
+
+    def test_unknown_preset_falls_back(self):
+        self.assertEqual(ytpick.name_template({"name": "nope"}), ytpick.NAME_PRESETS["title"])
+
+    def test_template_used_in_outtmpl(self):
+        o = ytpick.download_opts({}, Path("/out"), "mkv", {**ytpick.DEFAULT_FMT, "name": "channel_title"},
+                                 lambda d: None, 1)
+        self.assertIn("%(channel)s - ", o["outtmpl"])
+
+
+class VideoLinkTests(unittest.TestCase):
+    def test_short_link(self):
+        spec = ytpick.parse_query("https://youtu.be/abcdefghijk")
+        self.assertEqual(spec["kind"], "video")
+        self.assertEqual(spec["url"], "https://youtu.be/abcdefghijk")
+
+    def test_watch_link(self):
+        self.assertEqual(ytpick.parse_query("https://www.youtube.com/watch?v=abcdefghijk")["kind"], "video")
+
+    def test_watch_link_with_list_is_playlist_free(self):
+        spec = ytpick.parse_query("https://www.youtube.com/playlist?list=PLx")
+        self.assertEqual(spec["kind"], "playlist")
+
+    def test_clip_regex(self):
+        ok = ["https://youtu.be/abcdefghijk", "https://www.youtube.com/watch?v=abcdefghijk",
+              "https://music.youtube.com/watch?v=abc"]
+        bad = ["https://example.com/watch?v=abc", "hello youtu.be/abc", "https://youtube.com.evil.io/x"]
+        for u in ok:
+            self.assertTrue(ytpick.CLIP_RE.match(u), u)
+        for u in bad:
+            self.assertFalse(ytpick.CLIP_RE.match(u), u)
+
+    def test_shutdown_command(self):
+        self.assertIsInstance(ytpick.shutdown_command(), list)
+
+    def test_frozen_blocks_upgrade(self):
+        from unittest import mock
+        with mock.patch.object(ytpick, "FROZEN", True):
+            with self.assertRaises(RuntimeError):
+                ytpick.upgrade_ytdlp()
+
+
 class StatsTests(unittest.TestCase):
     def test_compute_stats(self):
         from datetime import datetime
@@ -357,6 +406,130 @@ class GuiSmokeTests(unittest.TestCase):
         self.app.cancel_jobs(all_jobs=True)
         self.app.paused = False
         self.app.q_win.destroy()
+
+    def test_search_history(self):
+        self.app.q.delete(0, "end")
+        self.app.q.insert(0, "lofi")
+        self.app.remember_query("lofi")
+        self.app.remember_query("jazz")
+        self.app.remember_query("lofi")
+        self.assertEqual(self.app.search_hist[:2], ["lofi", "jazz"])
+        self.assertEqual(len(self.app.search_hist), len(set(self.app.search_hist)))
+        for i in range(60):
+            self.app.remember_query(f"q{i}")
+        self.assertEqual(len(self.app.search_hist), ytpick.HISTORY_MAX)
+
+    def test_clipboard_bar(self):
+        from unittest import mock
+        url = "https://youtu.be/abcdefghijk"
+        with mock.patch.object(self.app, "clipboard_get", return_value=url), \
+                mock.patch.object(self.app, "focus_displayof", return_value=self.app), \
+                mock.patch.object(self.app, "after"):
+            self.app.clip_last = ""
+            self.app.poll_clipboard()
+        self.assertEqual(self.app.clip_url, url)
+        self.assertTrue(self.app.clip_bar.winfo_manager())
+        self.app.hide_clip_bar()
+        self.assertFalse(self.app.clip_bar.winfo_manager())
+        with mock.patch.object(self.app, "clipboard_get", return_value="https://example.com/x"), \
+                mock.patch.object(self.app, "focus_displayof", return_value=self.app), \
+                mock.patch.object(self.app, "after"):
+            self.app.clip_last = ""
+            self.app.poll_clipboard()
+        self.assertEqual(self.app.clip_last, "")
+
+    def test_clipboard_ignored_without_focus(self):
+        from unittest import mock
+        with mock.patch.object(self.app, "clipboard_get", return_value="https://youtu.be/abcdefghijk"), \
+                mock.patch.object(self.app, "focus_displayof", return_value=None), \
+                mock.patch.object(self.app, "after"):
+            self.app.clip_last = ""
+            self.app.poll_clipboard()
+        self.assertEqual(self.app.clip_last, "")
+
+    def test_queue_finished_actions(self):
+        from unittest import mock
+        job = {"n": 99, "item": {"id": "x", "title": "T"}, "status": "done", "pct": 100.0, "speed": "",
+               "msg": "", "cancel": False}
+        self.app.jobs.append(job)
+        with mock.patch.object(self.app, "beep") as beep, \
+                mock.patch.object(self.app, "start_shutdown_countdown") as sd:
+            self.app.done_action = "sound"
+            self.app.on_queue_finished()
+            self.assertEqual((beep.call_count, sd.call_count), (1, 0))
+            self.app.on_queue_finished()
+            self.assertEqual(beep.call_count, 1)
+            job["notified"] = False
+            self.app.done_action = "shutdown"
+            self.app.on_queue_finished()
+            self.assertEqual(sd.call_count, 1)
+            job["notified"] = False
+            self.app.jobs.append({**job, "n": 100, "status": "failed", "notified": False})
+            self.app.on_queue_finished()
+            self.assertEqual(sd.call_count, 1)
+            job["notified"] = False
+            self.app.done_action = "none"
+            beep.reset_mock()
+            self.app.on_queue_finished()
+            self.assertEqual(beep.call_count, 0)
+        self.app.jobs[:] = [j for j in self.app.jobs if j["n"] < 99]
+        self.app.done_action = "sound"
+
+    def test_shutdown_countdown_cancel(self):
+        from unittest import mock
+        with mock.patch.object(self.app, "run_shutdown") as run:
+            self.app.start_shutdown_countdown()
+            self.app.update()
+            self.assertTrue(self.app.shutdown_win.winfo_exists())
+            self.app.shutdown_win.destroy()
+            self.app.update()
+            self.assertEqual(run.call_count, 0)
+
+    def test_pin_lists(self):
+        self.show(self.items())
+        all_label = ytpick._("Alle")
+        self.app.pin_view.set(all_label)
+        self.app.set_pin(["vid00000001"])
+        self.assertEqual(self.app.pinned["vid00000001"]["list"], ytpick.DEFAULT_PIN_LIST)
+        self.app.pin_lists.add("Musik")
+        self.app.refresh_pin_lists()
+        self.app.tree.selection_set(["vid00000002"])
+        from unittest import mock
+        with mock.patch.object(ytpick.simpledialog, "askstring", return_value="Musik"):
+            self.app.move_to_list()
+        self.assertEqual(self.app.pinned["vid00000002"]["list"], "Musik")
+        self.app.pin_view.set("Musik")
+        self.app.sync_pins()
+        self.assertEqual(self.app.tree.get_children()[0], "vid00000002")
+        self.assertTrue(self.app.in_view("vid00000002"))
+        self.assertFalse(self.app.in_view("vid00000001"))
+        self.app.pin_view.set(ytpick.DEFAULT_PIN_LIST)
+        self.app.sync_pins()
+        self.assertEqual(self.app.tree.get_children()[0], "vid00000001")
+        self.app.pinned.clear()
+        self.app.pin_lists.clear()
+        self.app.pin_view.set(all_label)
+        self.app.refresh_pin_lists()
+        self.app.sync_pins()
+
+    def test_pins_from_other_search_view(self):
+        self.show(self.items(3))
+        self.app.pin_view.set(ytpick._("Alle"))
+        self.app.pinned["gone0000001"] = {"id": "gone0000001", "title": "Old", "channel": "C", "channel_id": "",
+                                          "duration": 10, "views": 1, "date": "20260101", "verified": None,
+                                          "list": "Musik"}
+        self.app.pin_lists.add("Musik")
+        self.app.refresh_pin_lists()
+        self.app.sync_pins()
+        self.assertIn("gone0000001", self.app.tree.get_children())
+        self.app.pin_view.set(ytpick.DEFAULT_PIN_LIST)
+        self.app.sync_pins()
+        self.assertNotIn("gone0000001", self.app.tree.get_children())
+        self.app.pinned.clear()
+        self.app.pin_lists.clear()
+        self.app.pin_view.set(ytpick._("Alle"))
+        self.app.refresh_pin_lists()
+        self.app.sync_pins()
 
     def test_stats_window(self):
         self.app.downloads["vid00000002"] = {"title": "T", "channel": "C", "mode": "mp3", "height": 0,
