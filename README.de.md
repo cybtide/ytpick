@@ -47,6 +47,7 @@
 - Oberfläche auf Deutsch und Englisch
 - yt-dlp-Update per Klick in der Kurzanleitung
 - Terminal-Version `ytpick-cli` für Linux, macOS und Windows
+- Hinweis, wenn auf GitHub eine neuere Version verfügbar ist (in den Einstellungen abschaltbar)
 
 ## Voraussetzungen
 
@@ -164,6 +165,10 @@ python -m unittest discover -s tests -v
 ```
 
 Die Tests, die das Fenster öffnen, brauchen eine Anzeige (unter Linux zum Beispiel `xvfb-run`).
+
+## Update-Prüfung
+
+Beim Start (höchstens einmal am Tag) fragt ytpick die öffentliche GitHub-API nach dem neuesten Release dieses Repositories und zeigt bei einer neueren Version einen Hinweis mit Link zur Download-Seite. Es wird nichts automatisch installiert, und außer der Anfrage selbst werden keine Daten über dich gesendet. Du kannst die Prüfung in den Einstellungen abschalten oder unter *Werkzeuge → Nach Updates suchen* von Hand starten.
 
 ## Hinweise zur Nutzung
 

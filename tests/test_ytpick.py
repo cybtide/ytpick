@@ -276,6 +276,37 @@ class NormalizeTests(unittest.TestCase):
         self.assertTrue(ytpick.normalize({"id": VID, "channel_is_verified": True}, None)["verified"])
 
 
+class UpdateCheckTests(unittest.TestCase):
+    def test_parse_and_compare_versions(self):
+        self.assertEqual(ytpick.parse_version("v0.4.1"), (0, 4, 1))
+        self.assertEqual(ytpick.parse_version("1.0.0-beta"), (1, 0, 0))
+        self.assertIsNone(ytpick.parse_version("latest"))
+        self.assertTrue(ytpick.is_newer("0.10.0", "0.9.9"))
+        self.assertTrue(ytpick.is_newer("v1.0.0", "0.99.99"))
+        self.assertFalse(ytpick.is_newer("0.4.0", "0.4.0"))
+        self.assertFalse(ytpick.is_newer("0.3.9", "0.4.0"))
+        self.assertFalse(ytpick.is_newer("kaputt", "0.4.0"))
+
+    def test_fetch_latest_release(self):
+        import io
+        import json as js
+
+        class Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        body = js.dumps({"tag_name": "v9.9.9", "html_url": "https://github.com/x/y/releases/tag/v9.9.9"})
+        with mock.patch.object(ytpick, "urlopen", return_value=Resp(body.encode())):
+            info = ytpick.fetch_latest_release()
+        self.assertEqual(info, {"version": "9.9.9", "url": "https://github.com/x/y/releases/tag/v9.9.9"})
+        with mock.patch.object(ytpick, "urlopen", return_value=Resp(b'{"tag_name": "x"}')):
+            with self.assertRaises(ValueError):
+                ytpick.fetch_latest_release()
+
+
 class CliTests(unittest.TestCase):
     def parse(self, *argv):
         args = ytpick_cli.make_parser().parse_args(list(argv))
@@ -563,6 +594,34 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(self.app.tree.selection(), (ids[-1],))
         self.app.key_nav(0, True, 0)
         self.assertEqual(self.app.tree.selection(), tuple(ids))
+
+    def test_update_bar_and_skip(self):
+        self.app.update_skip = ""
+        self.app.update_bar = None
+        info = {"version": "99.0.0", "url": "https://example.invalid/r"}
+        self.app.on_update_result(info, None, False)
+        self.assertIsNotNone(self.app.update_bar)
+        self.assertTrue(self.app.update_bar.winfo_manager())
+        with mock.patch.object(ytpick.webbrowser, "open") as opened:
+            self.app.open_update_page()
+        opened.assert_called_once_with("https://example.invalid/r")
+        self.app.skip_update()
+        self.assertEqual(self.app.update_skip, "99.0.0")
+        self.assertFalse(self.app.update_bar.winfo_manager())
+        self.app.on_update_result(info, None, False)
+        self.assertFalse(self.app.update_bar.winfo_manager())
+        self.app.on_update_result(info, None, True)
+        self.assertTrue(self.app.update_bar.winfo_manager())
+        self.app.hide_update_bar()
+        same = {"version": ytpick.__version__, "url": "u"}
+        with mock.patch.object(ytpick.messagebox, "showinfo") as shown:
+            self.app.on_update_result(same, None, True)
+        shown.assert_called_once()
+        with mock.patch.object(ytpick.messagebox, "showerror") as failed:
+            self.app.on_update_result(None, "offline", True)
+        failed.assert_called_once()
+        self.app.on_update_result(None, "offline", False)
+        self.app.update_skip = ""
 
     def test_rate_limit_applied(self):
         self.show(self.items())

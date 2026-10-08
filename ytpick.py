@@ -6,10 +6,12 @@ import queue
 import re
 import shutil
 import subprocess
+import ssl
 import sys
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -324,6 +326,17 @@ TRANSLATIONS.update({
     "Datum erneut versuchen": "Retry dates",
     "Hilfe": "Help",
     "Werkzeuge": "Tools",
+    "Nach Updates suchen": "Check for updates",
+    "Suche nach Updates …": "Checking for updates …",
+    "Updates": "Updates",
+    "Du hast die neueste Version ({v}).": "You have the latest version ({v}).",
+    "Die Suche nach Updates ist fehlgeschlagen: {e}": "Checking for updates failed: {e}",
+    "Später": "Later",
+    "Diese Version überspringen": "Skip this version",
+    "Download-Seite öffnen": "Open download page",
+    "Neue Version {v} verfügbar (installiert: {c}).": "New version {v} available (installed: {c}).",
+    "Neue Version {v} verfügbar.": "New version {v} available.",
+    "Beim Start nach neuer Version suchen (GitHub)": "Check for a new version at startup (GitHub)",
     " · keine weiteren Treffer": " · no more results",
     "{l} … lädt weitere Treffer": "{l} … loading more results",
     "Mehr anzeigen (+{n})": "Show more (+{n})",
@@ -628,6 +641,38 @@ VIDEO_MODES = ("mkv", "mp4")
 MUSIC_MODES = ("mp3", "audio")
 
 
+REPO = "cybtide/ytpick"
+RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+RELEASES_URL = f"https://github.com/{REPO}/releases/latest"
+UPDATE_INTERVAL = 24 * 3600
+
+
+def parse_version(text):
+    m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", str(text or "").strip())
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def is_newer(candidate, current):
+    a, b = parse_version(candidate), parse_version(current)
+    return bool(a and b and a > b)
+
+
+def fetch_latest_release():
+    req = Request(RELEASES_API, headers={"User-Agent": f"ytpick/{__version__}",
+                                         "Accept": "application/vnd.github+json"})
+    try:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        ctx = ssl.create_default_context()
+    with urlopen(req, timeout=8, context=ctx) as r:
+        data = json.load(r)
+    tag = str(data.get("tag_name") or "")
+    if not parse_version(tag):
+        raise ValueError("tag_name")
+    return {"version": tag.lstrip("v"), "url": data.get("html_url") or RELEASES_URL}
+
+
 def fmt_size(n):
     n = float(n or 0)
     for unit in ("B", "KB", "MB", "GB"):
@@ -902,6 +947,11 @@ class App(tk.Tk):
         self.name_preset = s.get("name_preset", "title") if s.get("name_preset") in NAME_PRESETS else "title"
         self.done_action = s.get("done_action", "sound") if s.get("done_action") in DONE_ACTIONS else "sound"
         self.watch_clipboard = bool(s.get("watch_clipboard", True))
+        self.check_updates = bool(s.get("check_updates", True))
+        self.update_last = float(s.get("update_last", 0) or 0)
+        self.update_skip = str(s.get("update_skip", ""))
+        self.update_bar = None
+        self.update_info = None
         self.open_queue_on_add = bool(s.get("open_queue_on_add", False))
         self.clip_last = ""
         self.clip_bar = None
@@ -982,6 +1032,7 @@ class App(tk.Tk):
         for label, cmd in ((_("Beobachtete Kanäle…"), self.open_watch), (_("Verlauf…"), self.open_history),
                            (_("Statistik…"), self.open_stats), (_("Blockliste…"), self.open_blocklist),
                            (None, None), (_("Datum erneut versuchen"), self.retry_dates),
+                           (_("Nach Updates suchen"), lambda: self.start_update_check(True)),
                            (_("Hilfe"), self.show_readme_dialog)):
             if label is None:
                 self.tool_menu.add_separator()
@@ -1094,6 +1145,8 @@ class App(tk.Tk):
         except tk.TclError:
             self.clip_last = ""
         self.after(1500, self.poll_clipboard)
+        if self.check_updates and time.time() - self.update_last >= UPDATE_INTERVAL:
+            self.after(3000, self.start_update_check)
         if self.pinned:
             self.token += 1
             self._show([], self.token, _("Gemerkte Videos"))
@@ -1358,6 +1411,9 @@ class App(tk.Tk):
                 "done_action": self.done_action,
                 "watch_clipboard": self.watch_clipboard,
                 "open_queue_on_add": self.open_queue_on_add,
+                "check_updates": self.check_updates,
+                "update_last": self.update_last,
+                "update_skip": self.update_skip,
             },
         }
         try:
@@ -1454,7 +1510,7 @@ class App(tk.Tk):
             return
         win = tk.Toplevel(self)
         win.title(_("Einstellungen"))
-        win.geometry("620x830")
+        win.geometry("640x870")
         win.transient(self)
         self.set_win = win
         self.set_order = list(self.col_order)
@@ -1468,6 +1524,7 @@ class App(tk.Tk):
         self.set_done = tk.StringVar(value=_(DONE_ACTION_LABELS[self.done_action]))
         self.set_clip = tk.BooleanVar(value=self.watch_clipboard)
         self.set_open_q = tk.BooleanVar(value=self.open_queue_on_add)
+        self.set_upd = tk.BooleanVar(value=self.check_updates)
         self.set_lang = tk.StringVar(value={"auto": "Auto", "de": "Deutsch", "en": "English"}[self.lang_choice])
 
         ttk.Label(win, text=_("Angezeigte Spalten und Reihenfolge"), padding=(12, 10, 12, 4)).pack(anchor="w")
@@ -1525,6 +1582,8 @@ class App(tk.Tk):
                         command=self.on_theme_toggle).grid(row=9, column=0, sticky="w", pady=(8, 0))
         ttk.Checkbutton(extra, text=_("Warteschlange beim Start eines Downloads öffnen"),
                         variable=self.set_open_q).grid(row=10, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(extra, text=_("Beim Start nach neuer Version suchen (GitHub)"),
+                        variable=self.set_upd).grid(row=11, column=0, columnspan=2, sticky="w", pady=(8, 0))
         btns = ttk.Frame(win, padding=12)
         btns.pack(fill="x")
         ttk.Button(btns, text=_("Übernehmen"), command=self.apply_settings).pack(side="right")
@@ -1586,6 +1645,7 @@ class App(tk.Tk):
         self.done_action = done_by_label.get(self.set_done.get(), "sound")
         self.watch_clipboard = self.set_clip.get()
         self.open_queue_on_add = self.set_open_q.get()
+        self.check_updates = self.set_upd.get()
         self.rate_mb = rate
         self.window_on = self.set_win_on.get()
         self.window_start = self.set_win_a.get().strip()
@@ -2623,6 +2683,66 @@ class App(tk.Tk):
                     self.show_clip_bar(text)
         finally:
             self.after(1500, self.poll_clipboard)
+
+    def start_update_check(self, manual=False):
+        def work():
+            try:
+                info, err = fetch_latest_release(), None
+            except Exception as e:
+                info, err = None, short_err(e, 120)
+            try:
+                self.after(0, lambda: self.on_update_result(info, err, manual))
+            except RuntimeError:
+                pass
+        if manual:
+            self.status.set(_("Suche nach Updates …"))
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_update_result(self, info, err, manual):
+        if info:
+            self.update_last = time.time()
+            self.save()
+            if is_newer(info["version"], __version__):
+                if manual or info["version"] != self.update_skip:
+                    self.show_update_bar(info)
+                return
+            if manual:
+                messagebox.showinfo(_("Updates"), _("Du hast die neueste Version ({v}).").format(v=__version__))
+        elif manual:
+            messagebox.showerror(_("Updates"), _("Die Suche nach Updates ist fehlgeschlagen: {e}").format(e=err))
+
+    def show_update_bar(self, info):
+        self.update_info = info
+        if self.update_bar is None:
+            bar = ttk.Frame(self, padding=(8, 4))
+            self.update_label = ttk.Label(bar)
+            self.update_label.pack(side="left", fill="x", expand=True)
+            ttk.Button(bar, text=_("Später"), command=self.hide_update_bar).pack(side="right")
+            ttk.Button(bar, text=_("Diese Version überspringen"), command=self.skip_update).pack(
+                side="right", padx=6)
+            ttk.Button(bar, text=_("Download-Seite öffnen"), command=self.open_update_page).pack(side="right")
+            self.update_bar = bar
+        self.update_label.configure(text=_("Neue Version {v} verfügbar (installiert: {c}).").format(
+            v=info["version"], c=__version__))
+        self.update_bar.pack(fill="x", before=self.top_frame)
+        self.status.set(_("Neue Version {v} verfügbar.").format(v=info["version"]))
+
+    def hide_update_bar(self):
+        if self.update_bar is not None:
+            self.update_bar.pack_forget()
+
+    def skip_update(self):
+        if self.update_info:
+            self.update_skip = self.update_info["version"]
+            self.save()
+        self.hide_update_bar()
+
+    def open_update_page(self):
+        url = (self.update_info or {}).get("url") or RELEASES_URL
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
 
     def show_clip_bar(self, url):
         self.clip_url = url

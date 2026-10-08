@@ -5,6 +5,10 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ## [Unveröffentlicht]
 
+### Hinzugefügt
+
+- Update-Prüfung: Beim Start (höchstens einmal am Tag) fragt ytpick GitHub nach dem neuesten Release und zeigt bei einer neueren Version eine Hinweisleiste mit Link zur Download-Seite, „Später“ und „Diese Version überspringen“; manuell unter „Werkzeuge → Nach Updates suchen“, abschaltbar in den Einstellungen
+
 ### Geändert
 
 - Neues, schlichteres Programmsymbol (Pfeil nach unten auf blauem Grund), für kleine Größen einzeln gezeichnet und deshalb in der Taskleiste scharf; Windows ordnet das Fenster jetzt dem eigenen Symbol zu
