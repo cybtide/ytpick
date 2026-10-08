@@ -19,6 +19,7 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 - Englische Oberfläche, Spracheinstellung in den Einstellungen
 - Englisches README mit Screenshot, deutsche Fassung in `README.de.md`
 - Automatische Tests und Testlauf im CI
+- Schaltfläche „yt-dlp aktualisieren“ in der Kurzanleitung
 
 ### Geändert
 

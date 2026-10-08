@@ -5,6 +5,7 @@ import os
 import queue
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -150,6 +151,9 @@ HELP_TEXT = [
           "   Zeigt geblockte Kanäle und ausgeblendete Videos mit Zeitpunkt, Entsperren und Log."),
     ("p", "5. Bot-Check von YouTube?\n"
           "   Unten bei \"Cookies aus Browser\" einen Browser wählen, in dem du bei YouTube eingeloggt bist."),
+    ("p", "6. Suche oder Download geht nicht mehr?\n"
+          "   YouTube ändert sich oft. \"yt-dlp aktualisieren\" (unten in diesem Fenster) lädt die neueste Version, "
+          "danach ytpick neu starten."),
     ("p", "Nur Inhalte herunterladen, die du herunterladen darfst."),
 ]
 
@@ -177,6 +181,9 @@ HELP_TEXT_EN = [
           "   Shows blocked channels and hidden videos with timestamps, unblocking and the log."),
     ("p", "5. YouTube bot check?\n"
           "   Choose a browser at \"Cookies from browser\" in which you are signed in to YouTube."),
+    ("p", "6. Search or download stopped working?\n"
+          "   YouTube changes often. \"Update yt-dlp\" (at the bottom of this window) fetches the latest version; "
+          "restart ytpick afterwards."),
     ("p", "Only download content you are allowed to download."),
 ]
 
@@ -336,6 +343,11 @@ TRANSLATIONS.update({
     "Rang (#)": "Rank (#)",
     "Kanal-Status (verifiziert)": "Channel status (verified)",
     "Upload-Datum": "Upload date",
+    "yt-dlp aktualisieren": "Update yt-dlp",
+    "yt-dlp wird aktualisiert …": "Updating yt-dlp …",
+    "Aktualisierung fehlgeschlagen: {e}": "Update failed: {e}",
+    "yt-dlp ist aktuell (Version {v}).": "yt-dlp is up to date (version {v}).",
+    "yt-dlp aktualisiert: {a} → {b}. Bitte ytpick neu starten.": "yt-dlp updated: {a} → {b}. Please restart ytpick.",
 })
 
 
@@ -470,6 +482,24 @@ def normalize(e, info):
 
 class Cancelled(Exception):
     pass
+
+
+def installed_ytdlp_version():
+    try:
+        from importlib.metadata import version
+        return version("yt-dlp")
+    except Exception:
+        return "?"
+
+
+def upgrade_ytdlp():
+    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp[default]"]
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, creationflags=flags)
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        raise RuntimeError(tail[-1] if tail else f"pip exit {proc.returncode}")
+    return installed_ytdlp_version()
 
 
 def fetch_flat(url, limit=None, ydl_opts=None):
@@ -880,6 +910,8 @@ class App(tk.Tk):
         ttk.Checkbutton(btns, text=_("Beim Start anzeigen"), variable=self.show_readme,
                         command=self.save).pack(side="left")
         ttk.Button(btns, text=_("Los geht's"), command=win.destroy).pack(side="right")
+        self.upd_btn = ttk.Button(btns, text=_("yt-dlp aktualisieren"), command=self.update_ytdlp)
+        self.upd_btn.pack(side="right", padx=8)
 
         text = tk.Text(win, wrap="word", padx=16, pady=12, font=("Segoe UI", 10), cursor="arrow")
         text.pack(fill="both", expand=True)
@@ -898,6 +930,31 @@ class App(tk.Tk):
             text.insert("end", "\n" + _("Fehlende Teile installiert setup.bat (im Installer-Ordner).") + "\n", "p")
         text.configure(state="disabled")
         self.apply_theme()
+
+    def update_ytdlp(self):
+        self.upd_btn.state(["disabled"])
+        self.status.set(_("yt-dlp wird aktualisiert …"))
+        threading.Thread(target=self._update_ytdlp, args=(installed_ytdlp_version(),), daemon=True).start()
+
+    def _update_ytdlp(self, before):
+        try:
+            after = upgrade_ytdlp()
+        except Exception as err:
+            log("YTDLP UPDATE FAIL", short_err(err, 200))
+            self.set_status(_("Aktualisierung fehlgeschlagen: {e}").format(e=short_err(err)))
+            self.after(0, self.enable_update_button)
+            return
+        log("YTDLP UPDATE", f"{before} -> {after}")
+        if after == before:
+            msg = _("yt-dlp ist aktuell (Version {v}).").format(v=after)
+        else:
+            msg = _("yt-dlp aktualisiert: {a} → {b}. Bitte ytpick neu starten.").format(a=before, b=after)
+        self.set_status(msg)
+        self.after(0, self.enable_update_button)
+
+    def enable_update_button(self):
+        if self.readme_win and self.readme_win.winfo_exists():
+            self.upd_btn.state(["!disabled"])
 
     def save(self):
         data = {

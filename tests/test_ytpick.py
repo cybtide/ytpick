@@ -103,6 +103,23 @@ class DownloadOptionsTests(unittest.TestCase):
         self.assertEqual(self.opts(mode="mp4")["merge_output_format"], "mp4")
 
 
+class UpgradeTests(unittest.TestCase):
+    def test_reports_pip_failure(self):
+        from unittest import mock
+        fake = mock.Mock(returncode=1, stderr="line one\nerror: externally-managed-environment", stdout="")
+        with mock.patch("subprocess.run", return_value=fake):
+            with self.assertRaises(RuntimeError) as ctx:
+                ytpick.upgrade_ytdlp()
+        self.assertIn("externally-managed", str(ctx.exception))
+
+    def test_returns_installed_version(self):
+        from unittest import mock
+        fake = mock.Mock(returncode=0, stderr="", stdout="ok")
+        with mock.patch("subprocess.run", return_value=fake), \
+                mock.patch.object(ytpick, "installed_ytdlp_version", return_value="9.9.9"):
+            self.assertEqual(ytpick.upgrade_ytdlp(), "9.9.9")
+
+
 class NormalizeTests(unittest.TestCase):
     def test_verified_flag_is_optional(self):
         self.assertIsNone(ytpick.normalize({"id": VID}, None)["verified"])

@@ -33,6 +33,7 @@
 - Dark Mode, Kurzanleitung und Systemcheck beim Start
 - Anmeldung über die Cookies eines installierten Browsers
 - Oberfläche auf Deutsch und Englisch
+- yt-dlp-Update per Klick in der Kurzanleitung
 
 ## Voraussetzungen
 
