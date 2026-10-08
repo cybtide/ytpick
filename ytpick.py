@@ -174,12 +174,12 @@ HELP_TEXT = [
     ("p", "Playlists, Filter, Ausschnitt\n"
           "   Eine Playlist-URL (youtube.com/playlist?list=...) lädt die ganze Playlist in die Liste, "
           "\"Alle sichtbaren laden\" legt sie in die Warteschlange. Filter nach Dauer, Zeitraum und "
-          "verifizierten Kanälen stehen über der Liste. Unter \"Optionen…\" lädst du auch nur einen "
+          "verifizierten Kanälen stehen hinter dem Knopf \"Filter\". Unter \"Optionen…\" lädst du auch nur einen "
           "Ausschnitt, bettest Cover und Metadaten ein oder wählst MP3."),
     ("p", "4. Blockliste\n"
           "   Zeigt geblockte Kanäle und ausgeblendete Videos mit Zeitpunkt, Entsperren und Log."),
     ("p", "5. Bot-Check von YouTube?\n"
-          "   Unten bei \"Cookies aus Browser\" einen Browser wählen, in dem du bei YouTube eingeloggt bist."),
+          "   Unter \"Einstellungen\" bei \"Cookies aus Browser\" einen Browser wählen, in dem du bei YouTube eingeloggt bist."),
     ("p", "6. Suche oder Download geht nicht mehr?\n"
           "   YouTube ändert sich oft. \"yt-dlp aktualisieren\" (unten in diesem Fenster) lädt die neueste Version, "
           "danach ytpick neu starten."),
@@ -211,12 +211,12 @@ HELP_TEXT_EN = [
     ("p", "Playlists, filters, clips\n"
           "   A playlist URL (youtube.com/playlist?list=...) loads the whole playlist into the list, "
           "\"Download all visible\" puts it in the queue. Filters for duration, period and verified "
-          "channels sit above the list. \"Options…\" lets you download just a clip, embed cover and "
+          "channels are behind the \"Filters\" button. \"Options…\" lets you download just a clip, embed cover and "
           "metadata or choose MP3."),
     ("p", "4. Blocklist\n"
           "   Shows blocked channels and hidden videos with timestamps, unblocking and the log."),
     ("p", "5. YouTube bot check?\n"
-          "   Choose a browser at \"Cookies from browser\" in which you are signed in to YouTube."),
+          "   In \"Settings\" choose a browser at \"Cookies from browser\" in which you are signed in to YouTube."),
     ("p", "6. Search or download stopped working?\n"
           "   YouTube changes often. \"Update yt-dlp\" (at the bottom of this window) fetches the latest version; "
           "restart ytpick afterwards."),
@@ -275,8 +275,8 @@ TRANSLATIONS.update({
     "Log": "Log",
     "vor dem Logging": "before logging",
     "unbekannt": "unknown",
-    "YouTube verlangt einen Bot-Check. Wähle unten einen Browser bei 'Cookies aus Browser' (Datum bleibt bis dahin leer).":
-        "YouTube asks for a bot check. Choose a browser at 'Cookies from browser' below (dates stay empty until then).",
+    "YouTube verlangt einen Bot-Check. Wähle in den Einstellungen einen Browser bei 'Cookies aus Browser' (Datum bleibt bis dahin leer).":
+        "YouTube asks for a bot check. Choose a browser at 'Cookies from browser' in the settings (dates stay empty until then).",
     "Hinweis": "Note",
     "Bitte erst ein oder mehrere Videos auswählen.": "Please select one or more videos first.",
     "Beste": "Best",
@@ -2164,7 +2164,7 @@ class App(tk.Tk):
         if self.tree.exists(it["id"]):
             self.tree.set(it["id"], "datum", fmt_date(d))
         if self.date_abort:
-            self.status.set(_("YouTube verlangt einen Bot-Check. Wähle unten einen Browser bei "
+            self.status.set(_("YouTube verlangt einen Bot-Check. Wähle in den Einstellungen einen Browser bei "
                               "'Cookies aus Browser' (Datum bleibt bis dahin leer)."))
             self.offer_cookies()
         elif self.date_done >= self.date_total:

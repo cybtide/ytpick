@@ -46,6 +46,7 @@
 - Anmeldung über die Cookies eines installierten Browsers
 - Oberfläche auf Deutsch und Englisch
 - yt-dlp-Update per Klick in der Kurzanleitung
+- Terminal-Version `ytpick-cli` für Linux, macOS und Windows
 
 ## Voraussetzungen
 
@@ -76,11 +77,18 @@ Die Datei ist nicht signiert, deshalb kann Windows SmartScreen beim ersten Start
 
 Das Skript installiert fehlende Komponenten über winget, aktualisiert yt-dlp und legt Verknüpfungen auf dem Desktop und im Startmenü an.
 
+### Linux
+
+**Variante A: Programmdatei.** Lade `ytpick-x.y.z-linux-x86_64.tar.gz` aus dem Bereich *Releases*, entpacke sie und starte `./ytpick` (grafisch) oder `./ytpick-cli` (Terminal). Python ist nicht nötig. ffmpeg und Deno müssen weiterhin installiert sein, zum Beispiel `sudo apt install ffmpeg` und das [Deno-Installationsskript](https://deno.com). Die Programme sind unter Ubuntu 22.04 gebaut und brauchen eine ähnlich aktuelle glibc.
+
+**Variante B: pipx.** Siehe unten. Die grafische Version braucht das Paket `python3-tk`.
+
 ### pipx
 
 ```
 pipx install "ytpick[thumbnails] @ git+https://github.com/cybtide/ytpick"
 ytpick
+ytpick-cli --help
 ```
 
 ffmpeg und Deno müssen separat installiert sein. Ohne Vorschaubilder entfällt `[thumbnails]`.
@@ -117,7 +125,7 @@ python ytpick.py
 
 ## Bot-Prüfung von YouTube
 
-Meldet YouTube `Sign in to confirm you're not a bot`, wähle unten bei *Cookies aus Browser* einen Browser, in dem du bei YouTube angemeldet bist. Firefox funktioniert am zuverlässigsten. Chrome und Edge müssen unter Windows teilweise vollständig geschlossen sein.
+Meldet YouTube `Sign in to confirm you're not a bot`, wähle in den Einstellungen bei *Cookies aus Browser* einen Browser, in dem du bei YouTube angemeldet bist. Firefox funktioniert am zuverlässigsten. Chrome und Edge müssen unter Windows teilweise vollständig geschlossen sein.
 
 ## Gespeicherte Daten
 
@@ -132,12 +140,19 @@ Alle Dateien liegen im Benutzerverzeichnis.
 
 ## Kommandozeile
 
+`ytpick-cli` ist die Terminal-Version ohne Fenster und ohne tkinter. Nach `pipx install` steht sie als Befehl bereit, sonst startest du `python ytpick_cli.py`.
+
 ```
-python ytpick_cli.py "suchbegriff"
-python ytpick_cli.py "suchbegriff" -n 20 --mp4
-python ytpick_cli.py "https://www.youtube.com/watch?v=..."
-python ytpick_cli.py --help
+ytpick-cli "suchbegriff"
+ytpick-cli "suchbegriff" -n 20 --mp4
+ytpick-cli @kanalname tutorial --mp3 --embed
+ytpick-cli "https://www.youtube.com/playlist?list=..." --all -o ~/Musik
+ytpick-cli "https://www.youtube.com/watch?v=..." --cut 1:20-3:45
+ytpick-cli "suchbegriff" --list
+ytpick-cli --help
 ```
+
+Sie versteht dieselben Eingaben wie das Fenster (Suchbegriff, `@Kanal` mit Filterwort, Kanal-, Playlist- und Video-URLs). Die Treffer sind nummeriert; wähle mit `1,3`, `2-4` oder `all`, mit `m` kommen mehr Treffer. `--pick 1,3`, `--all` und `--list` laufen ohne Rückfragen, also auch in Skripten; der Exitcode ist 1, wenn ein Download fehlgeschlagen ist. Weitere Optionen: `--mp4`, `--mp3`, `--audio`, `--max-height`, `--cut`, `--embed`, `--chapters`, `--subs`, `--name`, `--channel-folder`, `--cookies`, `--rate`.
 
 ## Entwicklung
 

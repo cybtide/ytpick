@@ -14,6 +14,7 @@ dependencies = ["yt-dlp[default]"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
+    "Environment :: Console",
     "Environment :: X11 Applications",
     "Environment :: Win32 (MS Windows)",
     "Topic :: Multimedia :: Video",
@@ -25,8 +26,11 @@ thumbnails = ["pillow"]
 [project.gui-scripts]
 ytpick = "ytpick:main"
 
+[project.scripts]
+ytpick-cli = "ytpick_cli:entry"
+
 [tool.setuptools]
-py-modules = ["ytpick"]
+py-modules = ["ytpick", "ytpick_cli"]
 
 [tool.setuptools.dynamic]
 version = {attr = "ytpick.__version__"}
