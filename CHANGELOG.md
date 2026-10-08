@@ -21,6 +21,13 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 - Automatische Tests und Testlauf im CI
 - Schaltfläche „yt-dlp aktualisieren“ in der Kurzanleitung
 - Download als MP3
+- Playlists laden und komplett in die Warteschlange legen („Alle sichtbaren laden“)
+- Ausschnitt-Download (Start und Ende) und Einbetten von Cover und Metadaten in den Download-Optionen
+- Filter nach Dauer, Zeitraum und verifizierten Kanälen
+- Warnung vor erneutem Download bereits geladener Videos
+- Verlauf der geladenen Dateien mit Datei öffnen und Ordner zeigen
+- Geschwindigkeitslimit und Zeitfenster für die Warteschlange in den Einstellungen
+- Vorschlag der Cookies eines installierten Browsers, wenn YouTube einen Bot-Check verlangt
 
 ### Geändert
 

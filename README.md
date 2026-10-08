@@ -21,6 +21,14 @@
 - Channel search by `@handle` or channel URL, optionally with a title filter
 - Download queue with progress, pause and cancel
 - Per-download options: maximum resolution, embedded subtitles and chapters, folder per channel
+- Playlists: paste a playlist URL and queue the whole list
+- Clip download: only a time range of a video
+- Embed cover art and metadata (MP3, MP4, MKV)
+- Filters for duration, period and verified channels
+- Warning before downloading a video again, with the format used last time
+- History of downloaded files with open file / show folder
+- Speed limit and an optional time window (for example nights only) for the queue
+- Offers the cookies of an installed browser when YouTube asks for a bot check
 - Watch channels and list new videos since your last check
 - Pin videos: pinned videos stay on top and survive new searches
 - Optional thumbnails in the result list
@@ -78,6 +86,7 @@ python ytpick.py
 | `@channelname` | Latest videos of the channel |
 | `@channelname term` | Videos of the channel with the term in the title |
 | Channel URL | Videos of the channel |
+| Playlist URL (`youtube.com/playlist?list=...`) | All videos of the playlist, up to 300 |
 
 | Action | How |
 | --- | --- |
@@ -101,7 +110,7 @@ All files are located in the user directory.
 
 | File | Content |
 | --- | --- |
-| `.ytdl_gui.json` | Settings, download history, pinned and hidden videos, blocked and watched channels |
+| `.ytdl_gui.json` | Settings, download history, pinned and hidden videos, blocked and watched channels, downloaded files |
 | `.ytdl_gui_cache.json` | Cached search results and upload dates |
 | `.ytdl_gui_thumbs/` | Cached thumbnails |
 | `.ytdl_gui.log` | Log with timestamps |

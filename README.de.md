@@ -21,6 +21,14 @@
 - Kanalsuche per `@handle` oder Kanal-URL, optional mit Titelfilter
 - Download-Warteschlange mit Fortschritt, Pause und Abbrechen
 - Optionen pro Download: maximale Auflösung, eingebettete Untertitel und Kapitel, Ordner pro Kanal
+- Playlists: Playlist-URL einfügen und die ganze Liste in die Warteschlange legen
+- Ausschnitt laden: nur ein Zeitbereich eines Videos
+- Cover und Metadaten einbetten (MP3, MP4, MKV)
+- Filter nach Dauer, Zeitraum und verifizierten Kanälen
+- Warnung vor erneutem Download mit dem zuletzt genutzten Format
+- Verlauf der geladenen Dateien mit Datei öffnen und Ordner zeigen
+- Geschwindigkeitslimit und optionales Zeitfenster (zum Beispiel nur nachts) für die Warteschlange
+- Schlägt bei einem Bot-Check die Cookies eines installierten Browsers vor
 - Kanäle beobachten und neue Videos seit der letzten Prüfung anzeigen
 - Videos merken: gemerkte Videos stehen oben und bleiben bei neuen Suchen erhalten
 - Optionale Vorschaubilder in der Trefferliste
@@ -78,6 +86,7 @@ python ytpick.py
 | `@kanalname` | Neueste Videos des Kanals |
 | `@kanalname begriff` | Videos des Kanals mit dem Begriff im Titel |
 | Kanal-URL | Videos des Kanals |
+| Playlist-URL (`youtube.com/playlist?list=...`) | Alle Videos der Playlist, bis zu 300 |
 
 | Aktion | Bedienung |
 | --- | --- |
@@ -101,7 +110,7 @@ Alle Dateien liegen im Benutzerverzeichnis.
 
 | Datei | Inhalt |
 | --- | --- |
-| `.ytdl_gui.json` | Einstellungen, Download-Historie, gemerkte und ausgeblendete Videos, blockierte und beobachtete Kanäle |
+| `.ytdl_gui.json` | Einstellungen, Download-Historie, gemerkte und ausgeblendete Videos, blockierte und beobachtete Kanäle, geladene Dateien |
 | `.ytdl_gui_cache.json` | Zwischengespeicherte Suchergebnisse und Upload-Daten |
 | `.ytdl_gui_thumbs/` | Zwischengespeicherte Vorschaubilder |
 | `.ytdl_gui.log` | Protokoll mit Zeitstempeln |
