@@ -169,6 +169,39 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(spec["url"], "https://www.youtube.com/playlist?list=PLabc123")
 
 
+class StatsTests(unittest.TestCase):
+    def test_compute_stats(self):
+        from datetime import datetime
+        today = datetime(2026, 10, 8, 12, 0, 0)
+        downloads = {
+            "a": {"mode": "mkv", "channel": "X", "at": "2026-10-08 09:00:00", "size": 1000, "duration": 60},
+            "b": {"mode": "mp3", "channel": "X", "at": "2026-10-05 09:00:00", "size": 500, "duration": 120},
+            "c": {"mode": "mp4", "channel": "Y", "at": "2026-09-20 09:00:00", "size": 200, "duration": 30},
+            "d": {"mode": "audio", "channel": "Z", "at": "2025-01-01 09:00:00"},
+        }
+        st = ytpick.compute_stats(downloads, {"a", "b", "c", "d", "old"}, today)
+        self.assertEqual(st["total"], 4)
+        self.assertEqual(st["videos"], 2)
+        self.assertEqual(st["music"], 2)
+        self.assertEqual(st["without_record"], 1)
+        self.assertEqual((st["today"], st["week"], st["month"]), (1, 2, 3))
+        self.assertEqual(st["size"], 1700)
+        self.assertEqual(st["duration"], 210)
+        self.assertEqual(st["channels"][0], ("X", 2))
+        self.assertEqual(len(st["months"]), 12)
+        self.assertEqual(st["months"][-1], ("2026-10", 2))
+        self.assertEqual(dict(st["months"])["2026-09"], 1)
+
+    def test_formatting(self):
+        self.assertEqual(ytpick.fmt_size(512), "512 B")
+        self.assertEqual(ytpick.fmt_size(1536), "1.5 KB")
+        self.assertEqual(ytpick.fmt_hours(3660), "1:01 h")
+
+    def test_empty(self):
+        st = ytpick.compute_stats({}, set())
+        self.assertEqual((st["total"], st["size"]), (0, 0))
+
+
 class UpgradeTests(unittest.TestCase):
     def test_reports_pip_failure(self):
         from unittest import mock
@@ -324,6 +357,17 @@ class GuiSmokeTests(unittest.TestCase):
         self.app.cancel_jobs(all_jobs=True)
         self.app.paused = False
         self.app.q_win.destroy()
+
+    def test_stats_window(self):
+        self.app.downloads["vid00000002"] = {"title": "T", "channel": "C", "mode": "mp3", "height": 0,
+                                             "at": ytpick.now(), "file": "", "size": 2048, "duration": 90}
+        self.app.open_stats()
+        self.app.update()
+        values = [self.app.s_trees["sum"].item(i, "values") for i in self.app.s_trees["sum"].get_children()]
+        self.assertTrue(any(str(v[1]) == "1" for v in values if v[0] == ytpick._("Downloads gesamt")))
+        self.assertEqual(len(self.app.s_trees["month"].get_children()), 12)
+        self.app.s_win.destroy()
+        self.app.downloads.pop("vid00000002")
 
     def test_history_window(self):
         self.app.downloads["vid00000001"] = {"title": "T", "channel": "C", "mode": "mp3", "height": 0,
