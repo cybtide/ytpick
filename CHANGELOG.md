@@ -5,6 +5,10 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ## [Unveröffentlicht]
 
+### Geändert
+
+- Neues, schlichteres Programmsymbol (Pfeil nach unten auf blauem Grund), für kleine Größen einzeln gezeichnet und deshalb in der Taskleiste scharf; Windows ordnet das Fenster jetzt dem eigenen Symbol zu
+
 ### Hinzugefügt
 
 - Videos in der Warteschlange sind in der Trefferliste markiert (⏳ wartet, ⬇ lädt), damit man sie nicht erneut anklickt

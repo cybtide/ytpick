@@ -1103,6 +1103,12 @@ class App(tk.Tk):
     def set_icon(self):
         assets = BASE_DIR / "assets"
         ico, png = assets / "icon.ico", assets / "icon.png"
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("cybtide.ytpick")
+            except Exception:
+                pass
         try:
             if sys.platform == "win32" and ico.exists():
                 self.iconbitmap(default=str(ico))
