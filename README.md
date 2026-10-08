@@ -27,6 +27,7 @@
 - Filters for duration, period and verified channels
 - Warning before downloading a video again, with the format used last time
 - History of downloaded files with open file / show folder
+- Statistics: downloads in total, videos vs. music, per period, per channel and per month, total size and duration
 - Speed limit and an optional time window (for example nights only) for the queue
 - Offers the cookies of an installed browser when YouTube asks for a bot check
 - Watch channels and list new videos since your last check

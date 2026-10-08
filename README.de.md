@@ -27,6 +27,7 @@
 - Filter nach Dauer, Zeitraum und verifizierten Kanälen
 - Warnung vor erneutem Download mit dem zuletzt genutzten Format
 - Verlauf der geladenen Dateien mit Datei öffnen und Ordner zeigen
+- Statistik: Downloads gesamt, Videos und Musik, nach Zeitraum, Kanal und Monat, Gesamtgröße und Laufzeit
 - Geschwindigkeitslimit und optionales Zeitfenster (zum Beispiel nur nachts) für die Warteschlange
 - Schlägt bei einem Bot-Check die Cookies eines installierten Browsers vor
 - Kanäle beobachten und neue Videos seit der letzten Prüfung anzeigen

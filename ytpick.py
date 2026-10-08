@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -391,6 +392,25 @@ TRANSLATIONS.update({
     "7 Tage": "7 days",
     "30 Tage": "30 days",
     "1 Jahr": "1 year",
+    "Statistik…": "Statistics…",
+    "Statistik": "Statistics",
+    "Übersicht": "Overview",
+    "Kennzahl": "Metric",
+    "Wert": "Value",
+    "Downloads": "Downloads",
+    "Monat": "Month",
+    "Downloads gesamt": "Total downloads",
+    "Videos (MKV/MP4)": "Videos (MKV/MP4)",
+    "Musik und Audio (MP3/Audio)": "Music and audio (MP3/audio)",
+    "Heute": "Today",
+    "Letzte 7 Tage": "Last 7 days",
+    "Letzte 30 Tage": "Last 30 days",
+    "Gesamtgröße": "Total size",
+    "Gesamtlaufzeit": "Total duration",
+    "Erkannte Dateien ohne Verlaufseintrag": "Detected files without history entry",
+    "Blockierte Kanäle": "Blocked channels",
+    "Ausgeblendete Videos": "Hidden videos",
+    "Monate": "Months",
     "yt-dlp aktualisieren": "Update yt-dlp",
     "yt-dlp wird aktualisiert …": "Updating yt-dlp …",
     "Aktualisierung fehlgeschlagen: {e}": "Update failed: {e}",
@@ -542,6 +562,65 @@ def detect_browsers():
                   home / ".config" / "BraveSoftware" / "Brave-Browser"],
     }
     return [name for name, paths in candidates.items() if any(p.exists() for p in paths)]
+
+
+VIDEO_MODES = ("mkv", "mp4")
+MUSIC_MODES = ("mp3", "audio")
+
+
+def fmt_size(n):
+    n = float(n or 0)
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def fmt_hours(sec):
+    sec = int(sec or 0)
+    return f"{sec // 3600}:{sec % 3600 // 60:02d} h"
+
+
+def compute_stats(downloads, history, today=None):
+    today = today or datetime.now()
+    by_mode, channels, months = Counter(), Counter(), Counter()
+    size = duration = day = week = month = 0
+    for rec in downloads.values():
+        by_mode[rec.get("mode", "?")] += 1
+        channels[rec.get("channel") or "?"] += 1
+        size += rec.get("size") or 0
+        duration += rec.get("duration") or 0
+        try:
+            at = datetime.strptime(rec.get("at", ""), "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+        months[at.strftime("%Y-%m")] += 1
+        age = (today.date() - at.date()).days
+        day += age == 0
+        week += 0 <= age < 7
+        month += 0 <= age < 30
+    last = []
+    y, m = today.year, today.month
+    for _i in range(12):
+        last.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    last.reverse()
+    return {
+        "total": len(downloads),
+        "videos": sum(by_mode[k] for k in VIDEO_MODES),
+        "music": sum(by_mode[k] for k in MUSIC_MODES),
+        "without_record": len(set(history) - set(downloads)),
+        "by_mode": dict(by_mode),
+        "size": size,
+        "duration": duration,
+        "today": day,
+        "week": week,
+        "month": month,
+        "channels": channels.most_common(15),
+        "months": [(k, months.get(k, 0)) for k in last],
+    }
 
 
 def open_path(path, reveal=False):
@@ -734,6 +813,7 @@ class App(tk.Tk):
         self.cookie_offered = False
         self.limit = RESULTS
         self.h_win = None
+        self.s_win = None
         self.lang_choice = s.get("lang", "auto")
         LANG = detect_language(self.lang_choice)
         self.title(f"ytpick {__version__}")
@@ -807,8 +887,9 @@ class App(tk.Tk):
         ttk.Button(tools, text=_("Warteschlange…"), command=self.open_queue).pack(side="left")
         ttk.Button(tools, text=_("Beobachtete Kanäle…"), command=self.open_watch).pack(side="left", padx=6)
         ttk.Button(tools, text=_("Verlauf…"), command=self.open_history).pack(side="left")
-        ttk.Button(tools, text=_("Blockliste…"), command=self.open_blocklist).pack(side="left", padx=6)
-        ttk.Button(tools, text=_("Alle sichtbaren laden"), command=self.enqueue_all).pack(side="left")
+        ttk.Button(tools, text=_("Statistik…"), command=self.open_stats).pack(side="left", padx=6)
+        ttk.Button(tools, text=_("Blockliste…"), command=self.open_blocklist).pack(side="left")
+        ttk.Button(tools, text=_("Alle sichtbaren laden"), command=self.enqueue_all).pack(side="left", padx=6)
         ttk.Button(tools, text=_("Einstellungen…"), command=self.open_settings).pack(side="right")
         ttk.Button(filt, text=_("Kanal blockieren"), command=self.block_channels).pack(side="right")
         ttk.Button(filt, text=_("Merken (Leertaste)"), command=self.toggle_pin).pack(side="right", padx=6)
@@ -1033,7 +1114,7 @@ class App(tk.Tk):
             self.theme_window(self.bl_win)
             if self.bl_log:
                 self.style_text(self.bl_log)
-        for w in (self.q_win, self.w_win, self.fmt_win, self.h_win):
+        for w in (self.q_win, self.w_win, self.fmt_win, self.h_win, self.s_win):
             if w and w.winfo_exists():
                 self.theme_window(w)
         if self.set_win and self.set_win.winfo_exists():
@@ -2005,9 +2086,14 @@ class App(tk.Tk):
                 job["status"], job["pct"], job["msg"] = "done", 100.0, Path(path).name
                 self.history.add(it["id"])
                 self.disk_ids.add(it["id"])
+                try:
+                    file_size = Path(path).stat().st_size
+                except OSError:
+                    file_size = 0
                 self.downloads[it["id"]] = {
                     "title": it["title"], "channel": it["channel"], "mode": job["mode"],
-                    "height": job["fmt"].get("height", 0), "at": now(), "file": path}
+                    "height": job["fmt"].get("height", 0), "at": now(), "file": path,
+                    "size": file_size, "duration": it.get("duration") or 0}
                 log("DOWNLOAD", f"{it['id']} | {it['title']} | {it['channel']} | {path}")
                 self.after(0, self.save)
                 self.after(0, self.render)
@@ -2167,6 +2253,72 @@ class App(tk.Tk):
                   "Cookies aus {b} verwenden? Du musst dort bei YouTube angemeldet sein.").format(b=name)):
             self.cookies.set(name)
             self.on_cookies_changed()
+
+    def open_stats(self):
+        if self.s_win and self.s_win.winfo_exists():
+            self.s_win.lift()
+            self.refresh_stats()
+            return
+        win = tk.Toplevel(self)
+        win.title(_("Statistik"))
+        win.geometry("560x520")
+        win.transient(self)
+        self.s_win = win
+        self.theme_window(win)
+        nb = ttk.Notebook(win)
+        nb.pack(fill="both", expand=True, padx=8, pady=8)
+        self.s_trees = {}
+        for key, title, cols in (
+                ("sum", _("Übersicht"), (("name", _("Kennzahl"), 320), ("value", _("Wert"), 180))),
+                ("chan", _("Kanäle"), (("name", _("Kanal"), 320), ("value", _("Downloads"), 100))),
+                ("month", _("Monate"), (("name", _("Monat"), 120), ("value", _("Downloads"), 100),
+                                        ("bar", "", 260)))):
+            frame = ttk.Frame(nb, padding=6)
+            tv = ttk.Treeview(frame, columns=[c[0] for c in cols], show="headings", selectmode="browse")
+            for c, t, w in cols:
+                tv.heading(c, text=t)
+                tv.column(c, width=w, anchor="e" if c == "value" else "w", stretch=(c == "name"))
+            tv.pack(fill="both", expand=True)
+            nb.add(frame, text=title)
+            self.s_trees[key] = tv
+        ttk.Button(win, text=_("Aktualisieren"), command=self.refresh_stats).pack(pady=(0, 8))
+        self.apply_theme()
+        self.refresh_stats()
+
+    def refresh_stats(self):
+        if not (self.s_win and self.s_win.winfo_exists()):
+            return
+        st = compute_stats(self.downloads, self.history)
+        for tv in self.s_trees.values():
+            tv.delete(*tv.get_children())
+        rows = [
+            (_("Downloads gesamt"), st["total"]),
+            (_("Videos (MKV/MP4)"), st["videos"]),
+            (_("Musik und Audio (MP3/Audio)"), st["music"]),
+        ]
+        for mode in ("mkv", "mp4", "mp3", "audio"):
+            if st["by_mode"].get(mode):
+                rows.append(("   " + self.mode_label(mode), st["by_mode"][mode]))
+        rows += [
+            (_("Heute"), st["today"]),
+            (_("Letzte 7 Tage"), st["week"]),
+            (_("Letzte 30 Tage"), st["month"]),
+            (_("Gesamtgröße"), fmt_size(st["size"])),
+            (_("Gesamtlaufzeit"), fmt_hours(st["duration"])),
+            (_("Erkannte Dateien ohne Verlaufseintrag"), st["without_record"]),
+            (_("Blockierte Kanäle"), len(self.blocked)),
+            (_("Ausgeblendete Videos"), len(self.hidden)),
+            (_("Gemerkte Videos"), len(self.pinned)),
+            (_("Beobachtete Kanäle"), len(self.watch)),
+        ]
+        for i, (name, value) in enumerate(rows):
+            self.s_trees["sum"].insert("", "end", iid=str(i), values=(name, value))
+        for i, (name, count) in enumerate(st["channels"]):
+            self.s_trees["chan"].insert("", "end", iid=str(i), values=(name, count))
+        peak = max([c for _m, c in st["months"]] + [1])
+        for i, (name, count) in enumerate(st["months"]):
+            bar = "█" * round(count * 24 / peak)
+            self.s_trees["month"].insert("", "end", iid=str(i), values=(name, count, bar))
 
     def open_history(self):
         if self.h_win and self.h_win.winfo_exists():

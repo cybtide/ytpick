@@ -26,6 +26,7 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 - Filter nach Dauer, Zeitraum und verifizierten Kanälen
 - Warnung vor erneutem Download bereits geladener Videos
 - Verlauf der geladenen Dateien mit Datei öffnen und Ordner zeigen
+- Statistik-Fenster mit Anzahl von Videos und Musik, Zeiträumen, Top-Kanälen, Monaten, Größe und Laufzeit
 - Geschwindigkeitslimit und Zeitfenster für die Warteschlange in den Einstellungen
 - Vorschlag der Cookies eines installierten Browsers, wenn YouTube einen Bot-Check verlangt
 
