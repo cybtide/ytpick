@@ -33,3 +33,23 @@ jobs:
         with:
           files: ytpick-${{ env.VERSION }}-windows.zip
           body_path: release-notes.md
+
+  exe:
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pyinstaller "yt-dlp[default]" pillow
+      - name: Build executable
+        shell: bash
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytpick.py)
+          pyinstaller --noconfirm --onefile --windowed --name ytpick --icon assets/icon.ico --add-data "assets;assets" --collect-all yt_dlp --collect-all yt_dlp_ejs ytpick.py
+          mv dist/ytpick.exe "dist/ytpick-$version-windows.exe"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ytpick-${{ env.VERSION }}-windows.exe

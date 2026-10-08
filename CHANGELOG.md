@@ -27,6 +27,13 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 - Warnung vor erneutem Download bereits geladener Videos
 - Verlauf der geladenen Dateien mit Datei öffnen und Ordner zeigen
 - Statistik-Fenster mit Anzahl von Videos und Musik, Zeiträumen, Top-Kanälen, Monaten, Größe und Laufzeit
+- Windows-Programm als einzelne .exe im Release (PyInstaller), Build-Prüfung im CI
+- Dateinamen-Muster in den Einstellungen
+- Ton nach Ende der Warteschlange, optional mit Herunterfahren des PCs nach 60 Sekunden Bedenkzeit
+- Erkennung von YouTube-Links in der Zwischenablage, abschaltbar in den Einstellungen
+- Benannte Merklisten
+- Suchverlauf im Suchfeld
+- Einzelne Video-Links (`youtu.be`, `watch?v=`, Shorts) werden als Video geöffnet
 - Geschwindigkeitslimit und Zeitfenster für die Warteschlange in den Einstellungen
 - Vorschlag der Cookies eines installierten Browsers, wenn YouTube einen Bot-Check verlangt
 

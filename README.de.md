@@ -31,7 +31,10 @@
 - Geschwindigkeitslimit und optionales Zeitfenster (zum Beispiel nur nachts) für die Warteschlange
 - Schlägt bei einem Bot-Check die Cookies eines installierten Browsers vor
 - Kanäle beobachten und neue Videos seit der letzten Prüfung anzeigen
-- Videos merken: gemerkte Videos stehen oben und bleiben bei neuen Suchen erhalten
+- Videos in benannte Merklisten merken; gemerkte Videos stehen oben und bleiben bei neuen Suchen erhalten
+- Suchverlauf im Suchfeld, YouTube-Links aus der Zwischenablage werden automatisch angeboten
+- Dateinamen-Muster wählbar (Titel, Kanal und Titel oder Nummer und Titel)
+- Ton nach Ende der Warteschlange, optional danach den PC herunterfahren
 - Optionale Vorschaubilder in der Trefferliste
 - Spalten und ihre Reihenfolge in den Einstellungen wählen
 - Hinweis auf verifizierte Kanäle, sofern YouTube die Angabe liefert
@@ -57,6 +60,16 @@
 ## Installation
 
 ### Windows
+
+**Variante A: ausführbare Datei.** `ytpick-x.y.z-windows.exe` aus dem Bereich *Releases* herunterladen und starten. Python wird nicht gebraucht. ffmpeg und Deno müssen weiterhin installiert sein:
+
+```
+winget install Gyan.FFmpeg DenoLand.Deno
+```
+
+Die Datei ist nicht signiert, deshalb kann Windows SmartScreen beim ersten Start warnen. yt-dlp ist fest eingebaut; aktualisiert wird durch das Herunterladen der neuesten Version.
+
+**Variante B: Installer.**
 
 1. ZIP-Datei aus dem Bereich *Releases* herunterladen und entpacken.
 2. `setup.bat` ausführen.
@@ -87,6 +100,7 @@ python ytpick.py
 | `@kanalname` | Neueste Videos des Kanals |
 | `@kanalname begriff` | Videos des Kanals mit dem Begriff im Titel |
 | Kanal-URL | Videos des Kanals |
+| Video-Link (`youtu.be/...`, `watch?v=...`) | Dieses Video |
 | Playlist-URL (`youtube.com/playlist?list=...`) | Alle Videos der Playlist, bis zu 300 |
 
 | Aktion | Bedienung |

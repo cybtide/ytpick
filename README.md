@@ -31,7 +31,10 @@
 - Speed limit and an optional time window (for example nights only) for the queue
 - Offers the cookies of an installed browser when YouTube asks for a bot check
 - Watch channels and list new videos since your last check
-- Pin videos: pinned videos stay on top and survive new searches
+- Pin videos into named pin lists; pinned videos stay on top and survive new searches
+- Search history in the search box, YouTube links from the clipboard are offered automatically
+- Choose the file name pattern (title, channel and title, or number and title)
+- Sound when the queue is finished, optionally shut down the PC afterwards
 - Optional thumbnails in the result list
 - Choose and reorder the visible columns in the settings
 - Verified-channel indicator, shown only when YouTube provides it
@@ -57,6 +60,16 @@
 ## Installation
 
 ### Windows
+
+**Option A: executable.** Download `ytpick-x.y.z-windows.exe` from the *Releases* section and start it. No Python needed. ffmpeg and Deno still have to be installed:
+
+```
+winget install Gyan.FFmpeg DenoLand.Deno
+```
+
+The executable is not code-signed, so Windows SmartScreen may warn on the first start. yt-dlp is built into the executable; update it by downloading the latest release.
+
+**Option B: installer.**
 
 1. Download the ZIP file from the *Releases* section and extract it.
 2. Run `setup.bat`.
@@ -87,6 +100,7 @@ python ytpick.py
 | `@channelname` | Latest videos of the channel |
 | `@channelname term` | Videos of the channel with the term in the title |
 | Channel URL | Videos of the channel |
+| Video link (`youtu.be/...`, `watch?v=...`) | That video |
 | Playlist URL (`youtube.com/playlist?list=...`) | All videos of the playlist, up to 300 |
 
 | Action | How |
