@@ -425,6 +425,12 @@ class GuiSmokeTests(unittest.TestCase):
             self.app.hidden.pop(it["id"], None)
         self.app.render()
 
+    def test_show_more_raises_limit(self):
+        self.show(self.items())
+        before = self.app.limit
+        self.app.show_more()
+        self.assertEqual(self.app.limit, before + ytpick.RESULTS)
+
     def test_rate_limit_applied(self):
         self.show(self.items())
         self.app.paused = True
