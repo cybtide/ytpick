@@ -8,6 +8,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ytpick
+import ytpick_cli
 
 VID = "abcdefghijk"
 
@@ -273,6 +274,85 @@ class NormalizeTests(unittest.TestCase):
     def test_verified_flag_is_optional(self):
         self.assertIsNone(ytpick.normalize({"id": VID}, None)["verified"])
         self.assertTrue(ytpick.normalize({"id": VID, "channel_is_verified": True}, None)["verified"])
+
+
+class CliTests(unittest.TestCase):
+    def parse(self, *argv):
+        args = ytpick_cli.make_parser().parse_args(list(argv))
+        args.cut_range = ytpick_cli.parse_cut(args.cut)
+        return args
+
+    def test_version_matches_gui(self):
+        self.assertEqual(ytpick_cli.__version__, ytpick.__version__)
+
+    def test_parse_query_kinds(self):
+        q = ytpick_cli.parse_query
+        self.assertEqual(q("lofi beats")["kind"], "search")
+        self.assertEqual(q("@HSV")["url"], "https://www.youtube.com/@HSV/videos")
+        self.assertEqual(q("@HSV tor")["term"], "tor")
+        self.assertEqual(q("https://youtu.be/abcdefghijk")["kind"], "video")
+        self.assertEqual(q("https://www.youtube.com/watch?v=abcdefghijk&list=PL1")["kind"], "video")
+        self.assertEqual(q("https://www.youtube.com/playlist?list=PL1")["kind"], "playlist")
+        self.assertEqual(q("https://www.youtube.com/@x")["kind"], "channel")
+        self.assertEqual(q("http://127.0.0.1:8000/a.mp4")["kind"], "video")
+
+    def test_parse_cut(self):
+        self.assertEqual(ytpick_cli.parse_cut("1:20-3:45"), (80.0, 225.0))
+        self.assertEqual(ytpick_cli.parse_cut(""), (None, None))
+        for bad in ("5-1", "abc", "10"):
+            with self.assertRaises(ValueError):
+                ytpick_cli.parse_cut(bad)
+
+    def test_parse_selection(self):
+        self.assertEqual(ytpick_cli.parse_selection("1,3,2-4", 5), [1, 3, 2, 4])
+        self.assertEqual(ytpick_cli.parse_selection("all", 3), [1, 2, 3])
+        with self.assertRaises(ValueError):
+            ytpick_cli.parse_selection("9", 3)
+
+    def test_options_match_gui(self):
+        cases = [
+            ((), "mkv", {}),
+            (("--mp4", "--max-height", "720"), "mp4", {"height": 720}),
+            (("--mp3",), "mp3", {}),
+            (("--mp3", "--embed"), "mp3", {"embed": True}),
+            (("--audio",), "audio", {}),
+            (("--embed", "--chapters", "--subs", "de,en"), "mkv",
+             {"embed": True, "chapters": True, "subs": True, "sub_langs": "de,en"}),
+            (("--cut", "10-20", "--channel-folder", "--name", "channel"), "mkv",
+             {"cut_start": 10.0, "cut_end": 20.0, "channel_folder": True, "name": "channel_title"}),
+        ]
+        out = Path(tempfile.mkdtemp())
+        for argv, mode, fmt in cases:
+            cli = ytpick_cli.build_opts(self.parse(*argv), out)
+            gui = ytpick.download_opts({}, out, mode, fmt, lambda d: None)
+            for key in ("format", "merge_output_format", "format_sort", "postprocessors", "outtmpl",
+                        "writesubtitles", "subtitleslangs", "writethumbnail", "force_keyframes_at_cuts"):
+                self.assertEqual(cli.get(key), gui.get(key), (argv, key))
+
+    def test_fetch_filters_channel_by_term(self):
+        entries = [{"id": f"{i:011d}", "title": t, "channel": "C", "duration": 60, "view_count": 5}
+                   for i, t in enumerate(["Tor des Monats", "Interview", "Alle Tore"])]
+
+        class Fake:
+            def __init__(self, opts):
+                self.opts = opts
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"entries": entries, "channel": "C"}
+
+        with mock.patch.object(ytpick_cli.yt_dlp, "YoutubeDL", Fake):
+            got = ytpick_cli.fetch(ytpick_cli.parse_query("@C tor"), 10, self.parse())
+        self.assertEqual([e["title"] for e in got], ["Tor des Monats", "Alle Tore"])
+
+    def test_bad_cut_exits(self):
+        with self.assertRaises(SystemExit):
+            ytpick_cli.main(["--cut", "5-1", "x"])
 
 
 class GuiSmokeTests(unittest.TestCase):

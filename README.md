@@ -46,6 +46,7 @@
 - Dark mode, quick guide and system check at startup
 - English and German interface
 - One-click yt-dlp update from the quick guide
+- Terminal version `ytpick-cli` for Linux, macOS and Windows
 
 ## Requirements
 
@@ -76,11 +77,18 @@ The executable is not code-signed, so Windows SmartScreen may warn on the first 
 
 The script installs missing components through winget, updates yt-dlp and creates shortcuts on the desktop and in the start menu.
 
+### Linux
+
+**Option A: binary.** Download `ytpick-x.y.z-linux-x86_64.tar.gz` from the *Releases* section, extract it and start `./ytpick` (graphical) or `./ytpick-cli` (terminal). No Python needed. ffmpeg and Deno still have to be installed, for example `sudo apt install ffmpeg` and the [Deno install script](https://deno.com). The binaries are built on Ubuntu 22.04 and need a similarly recent glibc.
+
+**Option B: pipx.** See below. The graphical version needs the package `python3-tk`.
+
 ### pipx
 
 ```
 pipx install "ytpick[thumbnails] @ git+https://github.com/cybtide/ytpick"
 ytpick
+ytpick-cli --help
 ```
 
 ffmpeg and Deno have to be installed separately. Leave out `[thumbnails]` if you do not want thumbnails.
@@ -117,7 +125,7 @@ python ytpick.py
 
 ## YouTube bot check
 
-If YouTube reports `Sign in to confirm you're not a bot`, choose a browser in which you are signed in to YouTube at *Cookies from browser*. Firefox works most reliably. On Windows, Chrome and Edge sometimes have to be closed completely.
+If YouTube reports `Sign in to confirm you're not a bot`, choose a browser in which you are signed in to YouTube at *Cookies from browser* in the settings. Firefox works most reliably. On Windows, Chrome and Edge sometimes have to be closed completely.
 
 ## Stored data
 
@@ -132,12 +140,19 @@ All files are located in the user directory.
 
 ## Command line
 
+`ytpick-cli` is the terminal version without a window and without tkinter. After `pipx install` it is available as a command, otherwise start `python ytpick_cli.py`.
+
 ```
-python ytpick_cli.py "search term"
-python ytpick_cli.py "search term" -n 20 --mp4
-python ytpick_cli.py "https://www.youtube.com/watch?v=..."
-python ytpick_cli.py --help
+ytpick-cli "search term"
+ytpick-cli "search term" -n 20 --mp4
+ytpick-cli @channelname tutorial --mp3 --embed
+ytpick-cli "https://www.youtube.com/playlist?list=..." --all -o ~/Music
+ytpick-cli "https://www.youtube.com/watch?v=..." --cut 1:20-3:45
+ytpick-cli "search term" --list
+ytpick-cli --help
 ```
+
+It understands the same input as the window (search term, `@channel` with filter word, channel, playlist and video URLs). Results are numbered; choose with `1,3`, `2-4` or `all`, type `m` for more results. `--pick 1,3`, `--all` and `--list` work without questions, so it can run in scripts; the exit code is 1 if a download failed. Further options: `--mp4`, `--mp3`, `--audio`, `--max-height`, `--cut`, `--embed`, `--chapters`, `--subs`, `--name`, `--channel-folder`, `--cookies`, `--rate`.
 
 ## Development
 
