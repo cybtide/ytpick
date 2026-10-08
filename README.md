@@ -5,115 +5,142 @@
 <h1 align="center">ytpick</h1>
 
 <p align="center">
-  Desktop-Anwendung zum Suchen, Auswählen und Herunterladen von YouTube-Videos in bester Qualität.<br>
-  Grafische Oberfläche für <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>.
+  Desktop application to search YouTube, pick videos and download them in best quality.<br>
+  Graphical front end for <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>.<br>
+  <a href="README.de.md">Deutsch</a>
 </p>
 
-## Funktionen
+<p align="center">
+  <img src="docs/screenshot.png" alt="ytpick with demo data" width="820"><br>
+  <sub>Screenshot with demo data</sub>
+</p>
 
-- Suche mit bis zu 50 sichtbaren Treffern aus einem Pool von 150, sortierbar nach jeder Spalte
-- Kanalsuche per `@handle` oder Kanal-URL, optional mit Titelfilter
-- Videos ausblenden, Kanäle blockieren; Blockliste mit Zeitstempel, Entsperren und Protokoll
-- Bereits geladene Videos werden erkannt und markiert
-- Cache für Suchergebnisse und Upload-Daten, schont die Abfragelimits von YouTube
-- Download als MKV (beste Qualität), MP4 oder nur Audio
-- Dark Mode, Kurzanleitung und Systemcheck beim Start
-- Anmeldung über die Cookies eines installierten Browsers
+## Features
 
-## Voraussetzungen
+- Search with up to 50 visible results from a pool of 150, sortable by any column
+- Channel search by `@handle` or channel URL, optionally with a title filter
+- Download queue with progress, pause and cancel
+- Per-download options: maximum resolution, embedded subtitles and chapters, folder per channel
+- Watch channels and list new videos since your last check
+- Pin videos: pinned videos stay on top and survive new searches
+- Optional thumbnails in the result list
+- Choose and reorder the visible columns in the settings
+- Verified-channel indicator, shown only when YouTube provides it
+- Hide videos and block channels; blocklist with timestamps, unblocking and log
+- Already downloaded videos are recognised and marked; each finished file is checked against the selected video ID
+- Cache for search results and upload dates to stay within YouTube's rate limits
+- Download as MKV (best quality), MP4 or audio only
+- Sign-in through the cookies of an installed browser
+- Dark mode, quick guide and system check at startup
+- English and German interface
 
-| Komponente | Zweck |
+## Requirements
+
+| Component | Purpose |
 | --- | --- |
-| Python 3.10 oder neuer mit tkinter | Programm (Linux: Paket `python3-tk`) |
-| [ffmpeg](https://ffmpeg.org) | Video und Ton zusammenführen |
-| [Deno](https://deno.com) | JavaScript-Laufzeit, die yt-dlp für YouTube benötigt |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Suche und Download, wird per pip installiert |
+| Python 3.10 or newer with tkinter | The program (Linux: package `python3-tk`) |
+| [ffmpeg](https://ffmpeg.org) | Merging video and audio |
+| [Deno](https://deno.com) | JavaScript runtime that yt-dlp needs for YouTube |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Search and download, installed with pip |
+| [Pillow](https://python-pillow.org) (optional) | Thumbnails |
 
 ## Installation
 
 ### Windows
 
-1. ZIP-Datei aus dem Bereich *Releases* herunterladen und entpacken.
-2. `setup.bat` ausführen.
+1. Download the ZIP file from the *Releases* section and extract it.
+2. Run `setup.bat`.
 
-Das Skript installiert fehlende Komponenten über winget, aktualisiert yt-dlp und legt Verknüpfungen auf dem Desktop und im Startmenü an.
+The script installs missing components through winget, updates yt-dlp and creates shortcuts on the desktop and in the start menu.
 
 ### pipx
 
 ```
-pipx install git+https://github.com/cybtide/ytpick
+pipx install "ytpick[thumbnails] @ git+https://github.com/cybtide/ytpick"
 ytpick
 ```
 
-ffmpeg und Deno müssen separat installiert sein.
+ffmpeg and Deno have to be installed separately. Leave out `[thumbnails]` if you do not want thumbnails.
 
-### Manuell
+### Manual
 
 ```
 pip install -r requirements.txt
 python ytpick.py
 ```
 
-## Bedienung
+## Usage
 
-| Eingabe | Ergebnis |
+| Input | Result |
 | --- | --- |
-| `suchbegriff` | Videosuche |
-| `@kanalname` | Neueste Videos des Kanals |
-| `@kanalname begriff` | Videos des Kanals mit dem Begriff im Titel |
-| Kanal-URL | Videos des Kanals |
+| `search term` | Video search |
+| `@channelname` | Latest videos of the channel |
+| `@channelname term` | Videos of the channel with the term in the title |
+| Channel URL | Videos of the channel |
 
-| Aktion | Bedienung |
+| Action | How |
 | --- | --- |
-| Suche aus dem Cache | Enter |
-| Suche ohne Cache | Umschalt + Enter oder Schaltfläche *Ohne Cache* |
-| Mehrere Videos wählen | Strg- oder Umschalttaste |
-| Video ausblenden | Entf |
-| Kontextmenü | Rechtsklick |
-| Herunterladen | Doppelklick oder Schaltfläche *Auswahl herunterladen* |
-| Sortieren | Klick auf eine Spaltenüberschrift |
+| Search from cache | Enter |
+| Search without cache | Shift + Enter or the *No cache* button |
+| Select several videos | Ctrl or Shift |
+| Hide a video | Del |
+| Pin a video | Space or click on the star |
+| Context menu | Right click |
+| Download | Double click or *Download selection* |
+| Download with options | *Options…* or context menu |
+| Sort | Click a column header |
 
-## Bot-Prüfung von YouTube
+## YouTube bot check
 
-Meldet YouTube `Sign in to confirm you're not a bot`, wähle unten bei *Cookies aus Browser* einen Browser, in dem du bei YouTube angemeldet bist. Firefox funktioniert am zuverlässigsten. Chrome und Edge müssen unter Windows teilweise vollständig geschlossen sein.
+If YouTube reports `Sign in to confirm you're not a bot`, choose a browser in which you are signed in to YouTube at *Cookies from browser*. Firefox works most reliably. On Windows, Chrome and Edge sometimes have to be closed completely.
 
-## Gespeicherte Daten
+## Stored data
 
-Alle Dateien liegen im Benutzerverzeichnis.
+All files are located in the user directory.
 
-| Datei | Inhalt |
+| File | Content |
 | --- | --- |
-| `.ytdl_gui.json` | Einstellungen, Download-Historie, ausgeblendete Videos, blockierte Kanäle |
-| `.ytdl_gui_cache.json` | Zwischengespeicherte Suchergebnisse und Upload-Daten |
-| `.ytdl_gui.log` | Protokoll mit Zeitstempeln |
+| `.ytdl_gui.json` | Settings, download history, pinned and hidden videos, blocked and watched channels |
+| `.ytdl_gui_cache.json` | Cached search results and upload dates |
+| `.ytdl_gui_thumbs/` | Cached thumbnails |
+| `.ytdl_gui.log` | Log with timestamps |
 
-## Kommandozeile
+## Command line
 
 ```
-python ytpick_cli.py "suchbegriff"
-python ytpick_cli.py "suchbegriff" -n 20 --mp4
+python ytpick_cli.py "search term"
+python ytpick_cli.py "search term" -n 20 --mp4
 python ytpick_cli.py "https://www.youtube.com/watch?v=..."
 python ytpick_cli.py --help
 ```
 
-## Hinweise zur Nutzung
+## Development
 
-ytpick ist ein unabhängiges Projekt und steht in keiner Verbindung zu YouTube oder Google. Lade nur Inhalte herunter, zu deren Vervielfältigung du berechtigt bist, und beachte die Nutzungsbedingungen von YouTube sowie das in deinem Land geltende Recht.
+```
+pip install -e ".[thumbnails]"
+python -m unittest discover -s tests -v
+```
 
-yt-dlp, ffmpeg und Deno sind eigenständige Projekte mit eigenen Lizenzen. Sie sind nicht Bestandteil dieses Repositorys.
+The tests that open the window need a display (on Linux for example `xvfb-run`).
 
-## Versionierung und Releases
+## Notes on use
 
-ytpick folgt [Semantic Versioning](https://semver.org/lang/de/). Die installierte Version zeigt `ytpick --version` sowie die Kurzanleitung im Programm. Änderungen stehen im [Changelog](CHANGELOG.md).
+ytpick is an independent project and not affiliated with YouTube or Google. Only download content you are entitled to copy, and observe YouTube's terms of service and the law of your country.
 
-Ein Release entsteht so:
+yt-dlp, ffmpeg and Deno are independent projects with their own licenses. They are not part of this repository.
 
-1. `__version__` in `ytpick.py` erhöhen.
-2. In `CHANGELOG.md` einen Abschnitt `## [x.y.z] - JJJJ-MM-TT` ergänzen.
-3. Änderungen committen, Tag `vx.y.z` setzen und pushen.
+## Versioning and releases
 
-Der Release-Workflow prüft, ob Tag, Version und Changelog zusammenpassen, und veröffentlicht das Windows-Paket mit den Release-Notizen aus dem Changelog.
+ytpick follows [Semantic Versioning](https://semver.org). The installed version is shown by `ytpick --version` and in the quick guide. Changes are listed in the [changelog](CHANGELOG.md).
 
-## Lizenz
+A release is created like this:
+
+1. Raise `__version__` in `ytpick.py`.
+2. Add a section `## [x.y.z] - YYYY-MM-DD` to `CHANGELOG.md`.
+3. Commit, tag `vx.y.z` and push.
+
+The release workflow checks that tag, version and changelog match and publishes the Windows package with the release notes taken from the changelog.
+
+## License
 
 [MIT](LICENSE)
