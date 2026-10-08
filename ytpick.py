@@ -324,6 +324,9 @@ TRANSLATIONS.update({
     "Datum erneut versuchen": "Retry dates",
     "Hilfe": "Help",
     "Werkzeuge": "Tools",
+    "{n} ausgeblendet/geblockt": "{n} hidden/blocked",
+    "{n} bereits geladen (ausgeblendet)": "{n} already downloaded (hidden)",
+    "{n} durch Filter": "{n} filtered out",
     "Warteschlange beim Start eines Downloads öffnen": "Open queue window when a download starts",
     "Filter": "Filters",
     "Dark Mode": "Dark mode",
@@ -1703,6 +1706,28 @@ class App(tk.Tk):
                 return False
         return True
 
+    def explain_hidden(self):
+        if self.shown or not self.items:
+            return ""
+        hidden = dl = filt = 0
+        for it in self.items:
+            if self.in_view(it["id"]):
+                continue
+            if (it["id"] in self.hidden or self.chan_key(it) in self.blocked) and not self.show_hidden.get():
+                hidden += 1
+            elif self.is_downloaded(it["id"]) and self.hide_downloaded.get():
+                dl += 1
+            elif not self.passes_filters(it):
+                filt += 1
+        parts = []
+        if hidden:
+            parts.append(_("{n} ausgeblendet/geblockt").format(n=hidden))
+        if dl:
+            parts.append(_("{n} bereits geladen (ausgeblendet)").format(n=dl))
+        if filt:
+            parts.append(_("{n} durch Filter").format(n=filt))
+        return (" · " + ", ".join(parts)) if parts else ""
+
     def filters_active(self):
         return bool(self.minutes(self.f_min) or self.minutes(self.f_max) or self.f_verified.get()
                     or self.f_range.get() != _(DATE_RANGES[0][0]))
@@ -2045,6 +2070,7 @@ class App(tk.Tk):
         self.render()
         missing = sum(1 for it in self.shown if it["date"] is None)
         self.status.set(_("{note} · {n} sichtbar (Pool {p})").format(note=note, n=len(self.shown), p=len(self.items))
+                        + self.explain_hidden()
                         + (_(" · Datum fehlt bei {m}").format(m=missing) if missing and self.fetch_dates.get() else ""))
 
     def ensure_dates(self):

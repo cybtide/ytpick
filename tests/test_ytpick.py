@@ -412,6 +412,19 @@ class GuiSmokeTests(unittest.TestCase):
         opened.assert_not_called()
         self.app.cancel_jobs(all_jobs=True)
 
+    def test_explain_hidden_when_nothing_visible(self):
+        items = self.items()
+        self.show(items)
+        self.assertEqual(self.app.explain_hidden(), "")
+        for it in items:
+            self.app.hidden[it["id"]] = {"title": it["title"], "channel": it["channel"], "at": ""}
+        self.app.render()
+        self.assertEqual(self.app.shown, [])
+        self.assertIn(str(len(items)), self.app.explain_hidden())
+        for it in items:
+            self.app.hidden.pop(it["id"], None)
+        self.app.render()
+
     def test_rate_limit_applied(self):
         self.show(self.items())
         self.app.paused = True
