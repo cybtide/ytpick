@@ -324,6 +324,8 @@ TRANSLATIONS.update({
     "Datum erneut versuchen": "Retry dates",
     "Hilfe": "Help",
     "Werkzeuge": "Tools",
+    "Mehr anzeigen (+{n})": "Show more (+{n})",
+    "{n} sichtbar (Pool {p})": "{n} visible (pool {p})",
     "{n} ausgeblendet/geblockt": "{n} hidden/blocked",
     "{n} bereits geladen (ausgeblendet)": "{n} already downloaded (hidden)",
     "{n} durch Filter": "{n} filtered out",
@@ -1056,6 +1058,8 @@ class App(tk.Tk):
         ttk.Button(bot, text=_("Auswahl herunterladen"), command=self.do_download).pack(side="right")
         ttk.Button(bot, text=_("Optionen…"), command=self.do_download_options).pack(side="right", padx=6)
         ttk.Button(bot, text=_("Alle sichtbaren laden"), command=self.enqueue_all).pack(side="right")
+        ttk.Button(bot, text=_("Mehr anzeigen (+{n})").format(n=RESULTS), command=self.show_more).pack(
+            side="right", padx=(0, 6))
 
         self.apply_theme()
         self.apply_thumbs()
@@ -1705,6 +1709,14 @@ class App(tk.Tk):
             if date < cutoff:
                 return False
         return True
+
+    def show_more(self):
+        if not self.items:
+            return
+        self.limit += RESULTS
+        self.render()
+        self.status.set(_("{n} sichtbar (Pool {p})").format(n=len(self.shown), p=len(self.items))
+                        + self.explain_hidden())
 
     def explain_hidden(self):
         if self.shown or not self.items:
