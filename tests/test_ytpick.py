@@ -319,8 +319,8 @@ class CliTests(unittest.TestCase):
     def test_parse_query_kinds(self):
         q = ytpick_cli.parse_query
         self.assertEqual(q("lofi beats")["kind"], "search")
-        self.assertEqual(q("@HSV")["url"], "https://www.youtube.com/@HSV/videos")
-        self.assertEqual(q("@HSV tor")["term"], "tor")
+        self.assertEqual(q("@channel")["url"], "https://www.youtube.com/@channel/videos")
+        self.assertEqual(q("@channel tor")["term"], "tor")
         self.assertEqual(q("https://youtu.be/abcdefghijk")["kind"], "video")
         self.assertEqual(q("https://www.youtube.com/watch?v=abcdefghijk&list=PL1")["kind"], "video")
         self.assertEqual(q("https://www.youtube.com/playlist?list=PL1")["kind"], "playlist")

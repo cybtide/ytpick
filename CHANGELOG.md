@@ -11,6 +11,7 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ### Geändert
 
+- README mit Kurzbeschreibung und neuem Screenshot; Beispiele im Hilfetext ohne Bezug auf einen bestimmten Kanal
 - Neues, schlichteres Programmsymbol (Pfeil nach unten auf blauem Grund), für kleine Größen einzeln gezeichnet und deshalb in der Taskleiste scharf; Windows ordnet das Fenster jetzt dem eigenen Symbol zu
 
 ### Hinzugefügt

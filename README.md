@@ -15,6 +15,10 @@
   <sub>Screenshot with demo data</sub>
 </p>
 
+## What it does
+
+ytpick is a window around yt-dlp for people who want to look before they download. You search YouTube or open a channel, playlist or link, see the results in a sortable list with channel, upload date, duration and views, tick the videos you want and download them in the format you choose: MKV, MP4, MP3 or audio only, optionally just a clip, with cover and metadata. Downloads run in a queue, videos you already have are marked, and hidden videos and blocked channels stay out of your results. Everything runs on your computer: no account, no server, no tracking. A terminal version, `ytpick-cli`, is included.
+
 ## Features
 
 - Search with up to 50 visible results from a pool of 150, sortable by any column

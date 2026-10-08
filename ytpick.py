@@ -156,7 +156,7 @@ HELP_TEXT = [
     ("h", "Kurzanleitung"),
     ("p", "1. Suchen\n"
           "   Suchbegriff eingeben und Enter drücken. Für einen Kanal: @handle oder Kanal-URL, "
-          "optional mit Filterwort (z.B. @HSV training).\n"
+          "optional mit Filterwort (z.B. @channelname training).\n"
           "   Shift+Enter oder \"Ohne Cache\" lädt frisch von YouTube, sonst hilft der Cache gegen Limits."),
     ("p", "2. Auswählen\n"
           "   Klicken (Strg/Shift = mehrere). Spaltenköpfe sortieren. Entf blendet Videos aus, "
@@ -193,7 +193,7 @@ HELP_TEXT_EN = [
     ("h", "Quick guide"),
     ("p", "1. Search\n"
           "   Type a search term and press Enter. For a channel use @handle or the channel URL, "
-          "optionally followed by a filter word (e.g. @HSV training).\n"
+          "optionally followed by a filter word (e.g. @channelname training).\n"
           "   Shift+Enter or \"No cache\" loads fresh from YouTube; otherwise the cache helps against rate limits."),
     ("p", "2. Pick\n"
           "   Click (Ctrl/Shift = several). Column headers sort. Del hides videos, "
