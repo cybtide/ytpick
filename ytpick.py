@@ -326,6 +326,11 @@ TRANSLATIONS.update({
     "Datum erneut versuchen": "Retry dates",
     "Hilfe": "Help",
     "Werkzeuge": "Tools",
+    "🪄 Accio Video!\nGleis 9¾ ist frei für deine Downloads.": "🪄 Accio Video!\nPlatform 9¾ is clear for your downloads.",
+    "🔷 Nur der HSV.\nRaute im Herzen, Video im Korb.": "🔷 Nur der HSV.\nDiamond in the heart, video in the basket.",
+    "🦅 Go Hawks!\nDer 12. Mann sucht mit.": "🦅 Go Hawks!\nThe 12th Man is searching along.",
+    "⚓ Moin!\nHamburg, das Tor zur Welt, auch für deine Downloads.": "⚓ Moin!\nHamburg, gateway to the world, and to your downloads.",
+    "☕ Regen, Kaffee und Space Needle.\nPerfektes Download-Wetter.": "☕ Rain, coffee and the Space Needle.\nPerfect download weather.",
     "Nach Updates suchen": "Check for updates",
     "Suche nach Updates …": "Checking for updates …",
     "Updates": "Updates",
@@ -639,6 +644,21 @@ def detect_browsers():
 
 VIDEO_MODES = ("mkv", "mp4")
 MUSIC_MODES = ("mp3", "audio")
+
+
+EGGS = {
+    "konami": "↑ ↑ ↓ ↓ ← → ← → B A\nPick wisely.",
+    "harry potter": "🪄 Accio Video!\nGleis 9¾ ist frei für deine Downloads.",
+    "hsv": "🔷 Nur der HSV.\nRaute im Herzen, Video im Korb.",
+    "seahawks": "🦅 Go Hawks!\nDer 12. Mann sucht mit.",
+    "hamburg": "⚓ Moin!\nHamburg, das Tor zur Welt, auch für deine Downloads.",
+    "seattle": "☕ Regen, Kaffee und Space Needle.\nPerfektes Download-Wetter.",
+}
+
+
+def easter_egg(query):
+    key = " ".join(str(query or "").lower().lstrip("@").split())
+    return EGGS.get(key)
 
 
 REPO = "cybtide/ytpick"
@@ -2155,6 +2175,9 @@ class App(tk.Tk):
         self.token += 1
         self.date_abort = False
         self.date_total = self.date_done = self.date_fail = 0
+        egg = easter_egg(query)
+        if egg:
+            self.show_toast(_(egg))
         spec = parse_query(query)
         self.remember_query(query)
         self.cur_spec = spec if spec["kind"] in ("search", "channel", "playlist") else None
@@ -2683,6 +2706,33 @@ class App(tk.Tk):
                     self.show_clip_bar(text)
         finally:
             self.after(1500, self.poll_clipboard)
+
+    def show_toast(self, text, ms=4500):
+        old = getattr(self, "toast", None)
+        if old is not None:
+            try:
+                old.destroy()
+            except tk.TclError:
+                pass
+        p = self.pal
+        win = tk.Toplevel(self, bg=p["accent"])
+        win.overrideredirect(True)
+        try:
+            win.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        label = tk.Label(win, text=text, justify="left", bg=p["panel"], fg=p["fg"],
+                         font=("Segoe UI", 11), padx=18, pady=12)
+        label.pack(padx=2, pady=2)
+        win.update_idletasks()
+        w, h = win.winfo_reqwidth(), win.winfo_reqheight()
+        x = self.winfo_rootx() + self.winfo_width() - w - 24
+        y = self.winfo_rooty() + self.winfo_height() - h - 70
+        win.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        win.bind("<Button-1>", lambda e: win.destroy())
+        label.bind("<Button-1>", lambda e: win.destroy())
+        self.toast = win
+        self.after(ms, lambda: win.winfo_exists() and win.destroy())
 
     def start_update_check(self, manual=False):
         def work():

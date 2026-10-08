@@ -276,6 +276,19 @@ class NormalizeTests(unittest.TestCase):
         self.assertTrue(ytpick.normalize({"id": VID, "channel_is_verified": True}, None)["verified"])
 
 
+class EasterEggTests(unittest.TestCase):
+    def test_lookup(self):
+        for q in ("Harry Potter", "  hsv ", "@HSV", "SEAHAWKS", "hamburg", "Seattle", "konami"):
+            self.assertTrue(ytpick.easter_egg(q), q)
+        for q in ("hsv training", "", None, "lofi"):
+            self.assertIsNone(ytpick.easter_egg(q), q)
+
+    def test_all_eggs_translated(self):
+        for key, text in ytpick.EGGS.items():
+            if key != "konami":
+                self.assertIn(text, ytpick.TRANSLATIONS, key)
+
+
 class UpdateCheckTests(unittest.TestCase):
     def test_parse_and_compare_versions(self):
         self.assertEqual(ytpick.parse_version("v0.4.1"), (0, 4, 1))
@@ -622,6 +635,15 @@ class GuiSmokeTests(unittest.TestCase):
         failed.assert_called_once()
         self.app.on_update_result(None, "offline", False)
         self.app.update_skip = ""
+
+    def test_toast_shows_and_replaces(self):
+        self.app.show_toast("eins")
+        first = self.app.toast
+        self.assertTrue(first.winfo_exists())
+        self.app.show_toast("zwei")
+        self.assertFalse(first.winfo_exists())
+        self.assertTrue(self.app.toast.winfo_exists())
+        self.app.toast.destroy()
 
     def test_rate_limit_applied(self):
         self.show(self.items())
