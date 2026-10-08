@@ -106,8 +106,67 @@ class DownloadOptionsTests(unittest.TestCase):
         extract = [p for p in o["postprocessors"] if p["key"] == "FFmpegExtractAudio"][0]
         self.assertEqual(extract["preferredcodec"], "mp3")
 
+    def test_embed_cover_and_metadata(self):
+        o = self.opts(embed=True)
+        keys = [p["key"] for p in o["postprocessors"]]
+        self.assertTrue(o["writethumbnail"])
+        self.assertEqual(keys[0], "FFmpegThumbnailsConvertor")
+        self.assertEqual(keys[-1], "EmbedThumbnail")
+        self.assertIn("FFmpegMetadata", keys)
+
+    def test_embed_skipped_for_plain_audio(self):
+        self.assertNotIn("writethumbnail", self.opts(mode="audio", embed=True))
+
+    def test_cut_section(self):
+        o = self.opts(cut_start=80, cut_end=225)
+        self.assertIn("download_ranges", o)
+        self.assertTrue(o["force_keyframes_at_cuts"])
+        self.assertIn(" clip", o["outtmpl"])
+        self.assertNotIn("download_ranges", self.opts())
+
     def test_mp4_merge(self):
         self.assertEqual(self.opts(mode="mp4")["merge_output_format"], "mp4")
+
+
+class HelperTests(unittest.TestCase):
+    def test_parse_time(self):
+        self.assertEqual(ytpick.parse_time("1:20"), 80)
+        self.assertEqual(ytpick.parse_time("1:02:03"), 3723)
+        self.assertEqual(ytpick.parse_time("45.5"), 45.5)
+        self.assertIsNone(ytpick.parse_time("  "))
+        with self.assertRaises(ValueError):
+            ytpick.parse_time("a:b")
+        with self.assertRaises(ValueError):
+            ytpick.parse_time("1:2:3:4")
+
+    def test_parse_clock(self):
+        self.assertEqual(ytpick.parse_clock("01:30"), 90)
+        with self.assertRaises(ValueError):
+            ytpick.parse_clock("25:00")
+
+    def test_in_window_overnight(self):
+        start, end = 22 * 60, 6 * 60
+        self.assertTrue(ytpick.in_window(23 * 60, start, end))
+        self.assertTrue(ytpick.in_window(5 * 60, start, end))
+        self.assertFalse(ytpick.in_window(12 * 60, start, end))
+
+    def test_in_window_same_day(self):
+        self.assertTrue(ytpick.in_window(120, 60, 360))
+        self.assertFalse(ytpick.in_window(400, 60, 360))
+        self.assertTrue(ytpick.in_window(400, 100, 100))
+
+    def test_detect_browsers(self):
+        from unittest import mock
+        home = Path(tempfile.mkdtemp())
+        (home / ".mozilla" / "firefox").mkdir(parents=True)
+        with mock.patch.object(Path, "home", return_value=home), \
+                mock.patch.dict(os.environ, {"LOCALAPPDATA": str(home / "x"), "APPDATA": str(home / "y")}):
+            self.assertEqual(ytpick.detect_browsers(), ["firefox"])
+
+    def test_playlist_query(self):
+        spec = ytpick.parse_query("https://www.youtube.com/playlist?list=PLabc123")
+        self.assertEqual(spec["kind"], "playlist")
+        self.assertEqual(spec["url"], "https://www.youtube.com/playlist?list=PLabc123")
 
 
 class UpgradeTests(unittest.TestCase):
@@ -197,6 +256,85 @@ class GuiSmokeTests(unittest.TestCase):
         self.app.update()
         self.assertTrue(self.app.fmt_win.winfo_exists())
         self.app.fmt_win.destroy()
+
+    def test_filters(self):
+        items = self.items()
+        items[1]["duration"] = 30
+        items[2]["duration"] = 7200
+        self.show(items)
+        total = len(self.app.tree.get_children())
+        self.app.f_min.set("1")
+        self.app.update()
+        self.assertEqual(len(self.app.tree.get_children()), total - 2)
+        self.app.reset_filters()
+        self.app.f_verified.set(True)
+        self.app.update()
+        self.assertTrue(all(self.app.by_id[i].get("verified") for i in self.app.tree.get_children()))
+        self.app.reset_filters()
+        self.app.update()
+        self.assertEqual(len(self.app.tree.get_children()), total)
+
+    def test_date_filter(self):
+        items = self.items(3)
+        items[0]["date"] = "20200101"
+        self.show(items)
+        label = ytpick._(ytpick.DATE_RANGES[1][0])
+        self.app.f_range.set(label)
+        self.app.update()
+        self.assertNotIn("vid00000000", self.app.tree.get_children())
+        self.app.reset_filters()
+
+    def test_playlist_limit_shows_all_items(self):
+        items = self.items(60)
+        self.app.token += 1
+        self.app._show(items, self.app.token, "playlist", ytpick.CHANNEL_POOL)
+        self.app.update()
+        self.assertEqual(len(self.app.tree.get_children()), 60)
+        self.show(items)
+        self.assertEqual(len(self.app.tree.get_children()), ytpick.RESULTS)
+
+    def test_duplicate_download_prompt(self):
+        from unittest import mock
+        self.show(self.items())
+        item = self.app.items[0]
+        self.app.history.add(item["id"])
+        self.app.paused = True
+        before = len(self.app.jobs)
+        with mock.patch.object(ytpick.messagebox, "askyesnocancel", return_value=False):
+            self.app.enqueue([item], dict(ytpick.DEFAULT_FMT), "mkv")
+        self.assertEqual(len(self.app.jobs), before)
+        with mock.patch.object(ytpick.messagebox, "askyesnocancel", return_value=True):
+            self.app.enqueue([item], dict(ytpick.DEFAULT_FMT), "mp3")
+        self.assertEqual(len(self.app.jobs), before + 1)
+        with mock.patch.object(ytpick.messagebox, "askyesnocancel", return_value=None):
+            self.app.cancel_jobs(all_jobs=True)
+            self.app.enqueue([item], dict(ytpick.DEFAULT_FMT), "mkv")
+        self.assertEqual(len(self.app.jobs), before + 2 - 1)
+        self.app.history.discard(item["id"])
+        self.app.paused = False
+        self.app.q_win.destroy()
+
+    def test_rate_limit_applied(self):
+        self.show(self.items())
+        self.app.paused = True
+        self.app.rate_mb = 2
+        self.app.enqueue([self.app.items[3]], dict(ytpick.DEFAULT_FMT), "mkv")
+        self.assertEqual(self.app.jobs[-1]["base"]["ratelimit"], 2 * 1048576)
+        self.app.rate_mb = 0
+        self.app.cancel_jobs(all_jobs=True)
+        self.app.paused = False
+        self.app.q_win.destroy()
+
+    def test_history_window(self):
+        self.app.downloads["vid00000001"] = {"title": "T", "channel": "C", "mode": "mp3", "height": 0,
+                                             "at": "2026-01-01 10:00:00", "file": "/nonexistent/x.mp3"}
+        self.app.open_history()
+        self.app.update()
+        self.assertIn("vid00000001", self.app.h_tree.get_children())
+        self.app.h_tree.selection_set("vid00000001")
+        self.app.remove_history()
+        self.assertNotIn("vid00000001", self.app.downloads)
+        self.app.h_win.destroy()
 
     def test_enqueue_deduplicates(self):
         self.show(self.items())

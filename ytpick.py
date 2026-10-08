@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 import tkinter as tk
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from urllib.request import Request, urlopen
@@ -92,7 +92,10 @@ WATCH_SEEN_MAX = 300
 WATCH_NEW_MAX = 60
 HEIGHTS = [0, 2160, 1440, 1080, 720, 480]
 DEFAULT_FMT = {"height": 0, "subs": False, "sub_langs": "de,en", "chapters": False,
-               "channel_folder": False}
+               "channel_folder": False, "embed": False, "cut_start": None, "cut_end": None}
+SAVED_FMT_KEYS = ("height", "subs", "sub_langs", "chapters", "channel_folder", "embed")
+DEFAULT_WINDOW = ("01:00", "06:00")
+DATE_RANGES = [("alle", 0), ("7 Tage", 7), ("30 Tage", 30), ("1 Jahr", 365)]
 RESULTS = 50
 POOL = 150
 CHANNEL_POOL = 300
@@ -147,6 +150,11 @@ HELP_TEXT = [
           "neuen Suche erhalten.\n"
           "   Unter \"Einstellungen\" wählst du Spalten aus und legst ihre Reihenfolge fest. "
           "Die Spalte Status zeigt ein Häkchen bei von YouTube verifizierten Kanälen."),
+    ("p", "Playlists, Filter, Ausschnitt\n"
+          "   Eine Playlist-URL (youtube.com/playlist?list=...) lädt die ganze Playlist in die Liste, "
+          "\"Alle sichtbaren laden\" legt sie in die Warteschlange. Filter nach Dauer, Zeitraum und "
+          "verifizierten Kanälen stehen über der Liste. Unter \"Optionen…\" lädst du auch nur einen "
+          "Ausschnitt, bettest Cover und Metadaten ein oder wählst MP3."),
     ("p", "4. Blockliste\n"
           "   Zeigt geblockte Kanäle und ausgeblendete Videos mit Zeitpunkt, Entsperren und Log."),
     ("p", "5. Bot-Check von YouTube?\n"
@@ -177,6 +185,11 @@ HELP_TEXT_EN = [
           "new search.\n"
           "   \"Settings\" lets you choose columns, their order, thumbnails and the language. "
           "The Status column shows a check mark for channels verified by YouTube."),
+    ("p", "Playlists, filters, clips\n"
+          "   A playlist URL (youtube.com/playlist?list=...) loads the whole playlist into the list, "
+          "\"Download all visible\" puts it in the queue. Filters for duration, period and verified "
+          "channels sit above the list. \"Options…\" lets you download just a clip, embed cover and "
+          "metadata or choose MP3."),
     ("p", "4. Blocklist\n"
           "   Shows blocked channels and hidden videos with timestamps, unblocking and the log."),
     ("p", "5. YouTube bot check?\n"
@@ -343,6 +356,41 @@ TRANSLATIONS.update({
     "Rang (#)": "Rank (#)",
     "Kanal-Status (verifiziert)": "Channel status (verified)",
     "Upload-Datum": "Upload date",
+    "YouTube verlangt eine Anmeldung": "YouTube requires sign-in",
+    "Verlauf": "History",
+    "Verlauf…": "History…",
+    "Bereits geladen": "Already downloaded",
+    "Zeitpunkt": "Time",
+    "Ungültiger Wert bei Geschwindigkeit oder Zeitfenster (Format hh:mm).":
+        "Invalid value for speed or time window (format hh:mm).",
+    "Audio": "Audio",
+    "Alle sichtbaren laden": "Download all visible",
+    "YouTube verlangt einen Bot-Check. {b} ist auf diesem Computer installiert.\n\nCookies aus {b} verwenden? Du musst dort bei YouTube angemeldet sein.":
+        "YouTube asks for a bot check. {b} is installed on this computer.\n\nUse cookies from {b}? You have to be signed in to YouTube there.",
+    "Playlist {t}": "Playlist {t}",
+    "Dauer (Min.) von": "Duration (min) from",
+    "bis": "to",
+    "Zeitraum": "Period",
+    "Nur verifizierte Kanäle": "Verified channels only",
+    "Filter zurücksetzen": "Reset filters",
+    "Max. Geschwindigkeit (MB/s, 0 = unbegrenzt)": "Max. speed (MB/s, 0 = unlimited)",
+    "Downloads nur im Zeitfenster starten (hh:mm)": "Start downloads only within time window (hh:mm)",
+    "Cover und Metadaten einbetten": "Embed cover and metadata",
+    "Ausschnitt (Start – Ende, z.B. 1:20 – 3:45)": "Clip (start – end, e.g. 1:20 – 3:45)",
+    "Ausschnitt": "Clip",
+    "Ungültiger Ausschnitt. Beispiel: 1:20 und 3:45.": "Invalid clip. Example: 1:20 and 3:45.",
+    "{n} Video(s) wurden schon geladen: {names}\n\nJa = trotzdem laden, Nein = überspringen, Abbrechen = nichts tun.":
+        "{n} video(s) were already downloaded: {names}\n\nYes = download anyway, No = skip, Cancel = do nothing.",
+    "wartet auf Zeitfenster {a}–{b}": "waiting for time window {a}–{b}",
+    "Datei öffnen": "Open file",
+    "Ordner zeigen": "Show folder",
+    "Aus Verlauf entfernen": "Remove from history",
+    "{n} Videos in die Warteschlange legen?": "Add {n} videos to the queue?",
+    "Datei nicht mehr vorhanden: {f}": "File no longer exists: {f}",
+    "alle": "all",
+    "7 Tage": "7 days",
+    "30 Tage": "30 days",
+    "1 Jahr": "1 year",
     "yt-dlp aktualisieren": "Update yt-dlp",
     "yt-dlp wird aktualisiert …": "Updating yt-dlp …",
     "Aktualisierung fehlgeschlagen: {e}": "Update failed: {e}",
@@ -410,12 +458,16 @@ def fmt_date(d):
     if d is None:
         return "…"
     if len(d) == 8:
+        if LANG == "en":
+            return f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
         return f"{d[6:8]}.{d[4:6]}.{d[0:4]}"
     return "?"
 
 
 def fmt_views(v):
-    return f"{v:,}".replace(",", ".") if v else "?"
+    if not v:
+        return "?"
+    return f"{v:,}" if LANG == "en" else f"{v:,}".replace(",", ".")
 
 
 def age_text(ts):
@@ -445,6 +497,69 @@ def load_json(path, default):
         return default
 
 
+def parse_time(text):
+    text = (text or "").strip()
+    if not text:
+        return None
+    parts = text.split(":")
+    if len(parts) > 3:
+        raise ValueError(text)
+    total = 0.0
+    for part in parts:
+        total = total * 60 + float(part.replace(",", "."))
+    if total < 0:
+        raise ValueError(text)
+    return total
+
+
+def parse_clock(text):
+    h, m = text.strip().split(":")
+    h, m = int(h), int(m)
+    if not (0 <= h < 24 and 0 <= m < 60):
+        raise ValueError(text)
+    return h * 60 + m
+
+
+def in_window(now_minutes, start, end):
+    if start == end:
+        return True
+    if start < end:
+        return start <= now_minutes < end
+    return now_minutes >= start or now_minutes < end
+
+
+def detect_browsers():
+    home = Path.home()
+    local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
+    roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
+    candidates = {
+        "firefox": [roaming / "Mozilla" / "Firefox", home / ".mozilla" / "firefox",
+                    home / "Library" / "Application Support" / "Firefox"],
+        "chrome": [local / "Google" / "Chrome" / "User Data", home / ".config" / "google-chrome",
+                   home / "Library" / "Application Support" / "Google" / "Chrome"],
+        "edge": [local / "Microsoft" / "Edge" / "User Data", home / ".config" / "microsoft-edge"],
+        "brave": [local / "BraveSoftware" / "Brave-Browser" / "User Data",
+                  home / ".config" / "BraveSoftware" / "Brave-Browser"],
+    }
+    return [name for name, paths in candidates.items() if any(p.exists() for p in paths)]
+
+
+def open_path(path, reveal=False):
+    path = str(path)
+    try:
+        if sys.platform == "win32":
+            if reveal:
+                subprocess.Popen(["explorer", "/select,", path])
+            else:
+                os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", path] if reveal else ["open", path])
+        else:
+            subprocess.Popen(["xdg-open", str(Path(path).parent) if reveal else path])
+    except Exception:
+        pass
+
+
 def parse_query(query):
     m = re.match(r"^(@\S+|https?://\S*youtube\.com/\S+)\s*(.*)$", query.strip())
     if not m:
@@ -459,6 +574,9 @@ def parse_query(query):
         if (not re.search(r"/(videos|streams|shorts|playlists|search|featured)(/|\?|$)", url)
                 and "/watch" not in url and "/playlist" not in url):
             url += "/videos"
+    if "/playlist" in url and "list=" in url:
+        return {"kind": "playlist", "key": f"p:{url}|{term.lower()}", "url": url, "term": term,
+                "label": _("Playlist {t}").format(t=target) + (_(" · Filter „{f}“").format(f=term) if term else "")}
     label = _("Kanal {t}").format(t=target) + (_(" · Filter „{f}“").format(f=term) if term else "")
     return {"kind": "channel", "key": f"c:{url}|{term.lower()}", "url": url,
             "term": term, "label": label}
@@ -517,8 +635,11 @@ def fetch_flat(url, limit=None, ydl_opts=None):
 def download_opts(base, outdir, mode, fmt, hook):
     opts = dict(base)
     folder = "%(channel)s/" if fmt.get("channel_folder") else ""
+    start, end = fmt.get("cut_start"), fmt.get("cut_end")
+    cut = start is not None or end is not None
+    suffix = " clip" if cut else ""
     opts.update({
-        "outtmpl": str(outdir / (folder + "%(title).150B [%(id)s].%(ext)s")),
+        "outtmpl": str(outdir / (folder + f"%(title).150B [%(id)s]{suffix}.%(ext)s")),
         "noplaylist": True,
         "windowsfilenames": True,
         "retries": 10,
@@ -526,12 +647,16 @@ def download_opts(base, outdir, mode, fmt, hook):
         "concurrent_fragment_downloads": 4,
         "progress_hooks": [hook],
     })
+    if cut:
+        opts["download_ranges"] = yt_dlp.utils.download_range_func(
+            [], [(start or 0, end if end is not None else float("inf"))])
+        opts["force_keyframes_at_cuts"] = True
+    audio = mode in ("audio", "mp3")
     pp = []
-    if mode in ("audio", "mp3"):
+    if audio:
         opts["format"] = "bestaudio/best"
         if mode == "mp3":
             pp.append({"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "0"})
-            pp.append({"key": "FFmpegMetadata", "add_metadata": True})
         else:
             pp.append({"key": "FFmpegExtractAudio", "preferredcodec": "best"})
     else:
@@ -546,10 +671,17 @@ def download_opts(base, outdir, mode, fmt, hook):
             if langs:
                 opts["writesubtitles"] = True
                 opts["subtitleslangs"] = langs
-    if fmt.get("chapters") and mode != "mp3":
-        pp.append({"key": "FFmpegMetadata", "add_chapters": True, "add_metadata": True})
-    if mode not in ("audio", "mp3") and opts.get("writesubtitles"):
+    embed = bool(fmt.get("embed")) and mode != "audio"
+    add_meta = mode == "mp3" or embed
+    add_chapters = bool(fmt.get("chapters")) and not audio
+    if add_meta or add_chapters:
+        pp.append({"key": "FFmpegMetadata", "add_chapters": add_chapters, "add_metadata": add_meta})
+    if not audio and opts.get("writesubtitles"):
         pp.append({"key": "FFmpegEmbedSubtitle"})
+    if embed:
+        opts["writethumbnail"] = True
+        pp.insert(0, {"key": "FFmpegThumbnailsConvertor", "format": "jpg", "when": "before_dl"})
+        pp.append({"key": "EmbedThumbnail"})
     if pp:
         opts["postprocessors"] = pp
     return opts
@@ -593,7 +725,15 @@ class App(tk.Tk):
         self.col_visible = {k for k in vis if k in COLUMN_KEYS} | LOCKED_COLUMNS
         self.set_win = None
         self.watch = st.get("watch", {})
-        self.fmt = {**DEFAULT_FMT, **s.get("fmt", {})}
+        self.fmt = {**DEFAULT_FMT, **{k: v for k, v in s.get("fmt", {}).items() if k in SAVED_FMT_KEYS}}
+        self.downloads = st.get("downloads", {})
+        self.rate_mb = float(s.get("rate_limit", 0) or 0)
+        self.window_on = bool(s.get("window_on", False))
+        self.window_start = s.get("window_start", DEFAULT_WINDOW[0])
+        self.window_end = s.get("window_end", DEFAULT_WINDOW[1])
+        self.cookie_offered = False
+        self.limit = RESULTS
+        self.h_win = None
         self.lang_choice = s.get("lang", "auto")
         LANG = detect_language(self.lang_choice)
         self.title(f"ytpick {__version__}")
@@ -637,6 +777,10 @@ class App(tk.Tk):
         self.dark = tk.BooleanVar(value=s.get("dark", True))
         self.show_readme = tk.BooleanVar(value=s.get("show_readme", True))
         self.show_thumbs = tk.BooleanVar(value=bool(s.get("show_thumbs", False)) and HAVE_PIL)
+        self.f_min = tk.StringVar(value="")
+        self.f_max = tk.StringVar(value="")
+        self.f_verified = tk.BooleanVar(value=False)
+        self.f_range = tk.StringVar(value=_(DATE_RANGES[0][0]))
         self.show_hidden = tk.BooleanVar(value=False)
         self.hide_downloaded = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value=_("Suchbegriff, @Kanal oder Kanal-URL eingeben und Enter drücken."))
@@ -662,12 +806,29 @@ class App(tk.Tk):
         tools.pack(fill="x")
         ttk.Button(tools, text=_("Warteschlange…"), command=self.open_queue).pack(side="left")
         ttk.Button(tools, text=_("Beobachtete Kanäle…"), command=self.open_watch).pack(side="left", padx=6)
-        ttk.Button(tools, text=_("Blockliste…"), command=self.open_blocklist).pack(side="left")
+        ttk.Button(tools, text=_("Verlauf…"), command=self.open_history).pack(side="left")
+        ttk.Button(tools, text=_("Blockliste…"), command=self.open_blocklist).pack(side="left", padx=6)
+        ttk.Button(tools, text=_("Alle sichtbaren laden"), command=self.enqueue_all).pack(side="left")
         ttk.Button(tools, text=_("Einstellungen…"), command=self.open_settings).pack(side="right")
         ttk.Button(filt, text=_("Kanal blockieren"), command=self.block_channels).pack(side="right")
         ttk.Button(filt, text=_("Merken (Leertaste)"), command=self.toggle_pin).pack(side="right", padx=6)
         ttk.Button(filt, text=_("Video ausblenden/einblenden (Entf)"),
                    command=self.toggle_hide).pack(side="right")
+
+        fl = ttk.Frame(self, padding=(8, 4, 8, 0))
+        fl.pack(fill="x")
+        ttk.Label(fl, text=_("Dauer (Min.) von")).pack(side="left")
+        ttk.Entry(fl, textvariable=self.f_min, width=5).pack(side="left", padx=4)
+        ttk.Label(fl, text=_("bis")).pack(side="left")
+        ttk.Entry(fl, textvariable=self.f_max, width=5).pack(side="left", padx=4)
+        ttk.Label(fl, text=_("Zeitraum")).pack(side="left", padx=(12, 4))
+        ttk.Combobox(fl, textvariable=self.f_range, values=[_(lbl) for lbl, days in DATE_RANGES],
+                     state="readonly", width=9).pack(side="left")
+        ttk.Checkbutton(fl, text=_("Nur verifizierte Kanäle"), variable=self.f_verified).pack(
+            side="left", padx=12)
+        ttk.Button(fl, text=_("Filter zurücksetzen"), command=self.reset_filters).pack(side="left")
+        for v in (self.f_min, self.f_max, self.f_verified, self.f_range):
+            v.trace_add("write", lambda *a: self.render())
 
         frame = ttk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8, pady=6)
@@ -872,7 +1033,7 @@ class App(tk.Tk):
             self.theme_window(self.bl_win)
             if self.bl_log:
                 self.style_text(self.bl_log)
-        for w in (self.q_win, self.w_win, self.fmt_win):
+        for w in (self.q_win, self.w_win, self.fmt_win, self.h_win):
             if w and w.winfo_exists():
                 self.theme_window(w)
         if self.set_win and self.set_win.winfo_exists():
@@ -967,6 +1128,7 @@ class App(tk.Tk):
             "downloaded": sorted(self.history),
             "pinned": self.pinned,
             "watch": self.watch,
+            "downloads": self.downloads,
             "settings": {
                 "col_order": self.col_order,
                 "col_visible": [k for k in self.col_order if k in self.col_visible],
@@ -978,7 +1140,11 @@ class App(tk.Tk):
                 "show_readme": self.show_readme.get(),
                 "show_thumbs": self.show_thumbs.get(),
                 "lang": self.lang_choice,
-                "fmt": self.fmt,
+                "fmt": {k: self.fmt.get(k) for k in SAVED_FMT_KEYS},
+                "rate_limit": self.rate_mb,
+                "window_on": self.window_on,
+                "window_start": self.window_start,
+                "window_end": self.window_end,
             },
         }
         try:
@@ -1060,12 +1226,16 @@ class App(tk.Tk):
             return
         win = tk.Toplevel(self)
         win.title(_("Einstellungen"))
-        win.geometry("460x540")
+        win.geometry("480x640")
         win.transient(self)
         self.set_win = win
         self.set_order = list(self.col_order)
         self.set_vis = set(self.col_visible)
         self.set_thumbs = tk.BooleanVar(value=self.show_thumbs.get())
+        self.set_rate = tk.StringVar(value=f"{self.rate_mb:g}")
+        self.set_win_on = tk.BooleanVar(value=self.window_on)
+        self.set_win_a = tk.StringVar(value=self.window_start)
+        self.set_win_b = tk.StringVar(value=self.window_end)
         self.set_lang = tk.StringVar(value={"auto": "Auto", "de": "Deutsch", "en": "English"}[self.lang_choice])
 
         ttk.Label(win, text=_("Angezeigte Spalten und Reihenfolge"), padding=(12, 10, 12, 4)).pack(anchor="w")
@@ -1095,6 +1265,16 @@ class App(tk.Tk):
         ttk.Label(extra, text=_("Sprache / Language")).grid(row=1, column=0, sticky="w", pady=(8, 0))
         ttk.Combobox(extra, textvariable=self.set_lang, values=["Auto", "Deutsch", "English"],
                      state="readonly", width=10).grid(row=1, column=1, sticky="w", padx=6, pady=(8, 0))
+        ttk.Label(extra, text=_("Max. Geschwindigkeit (MB/s, 0 = unbegrenzt)")).grid(
+            row=2, column=0, sticky="w", pady=(8, 0))
+        ttk.Entry(extra, textvariable=self.set_rate, width=6).grid(row=2, column=1, sticky="w", padx=6, pady=(8, 0))
+        ttk.Checkbutton(extra, text=_("Downloads nur im Zeitfenster starten (hh:mm)"),
+                        variable=self.set_win_on).grid(row=3, column=0, sticky="w", pady=(8, 0))
+        win_row = ttk.Frame(extra)
+        win_row.grid(row=3, column=1, sticky="w", padx=6, pady=(8, 0))
+        ttk.Entry(win_row, textvariable=self.set_win_a, width=6).pack(side="left")
+        ttk.Label(win_row, text="–").pack(side="left", padx=4)
+        ttk.Entry(win_row, textvariable=self.set_win_b, width=6).pack(side="left")
         btns = ttk.Frame(win, padding=12)
         btns.pack(fill="x")
         ttk.Button(btns, text=_("Übernehmen"), command=self.apply_settings).pack(side="right")
@@ -1139,6 +1319,21 @@ class App(tk.Tk):
         self.fill_setting_list(0)
 
     def apply_settings(self):
+        try:
+            rate = float(self.set_rate.get().replace(",", ".") or 0)
+            if rate < 0:
+                raise ValueError("rate")
+            parse_clock(self.set_win_a.get())
+            parse_clock(self.set_win_b.get())
+        except ValueError:
+            messagebox.showerror(_("Einstellungen"),
+                                 _("Ungültiger Wert bei Geschwindigkeit oder Zeitfenster (Format hh:mm)."),
+                                 parent=self.set_win)
+            return
+        self.rate_mb = rate
+        self.window_on = self.set_win_on.get()
+        self.window_start = self.set_win_a.get().strip()
+        self.window_end = self.set_win_b.get().strip()
         self.col_order = list(self.set_order)
         self.col_visible = set(self.set_vis) | LOCKED_COLUMNS
         self.apply_columns()
@@ -1183,6 +1378,40 @@ class App(tk.Tk):
                 log("UNPIN", f"{i} | {it['title']} | {it['channel']}")
         self.save()
         self.render()
+
+    def reset_filters(self):
+        self.f_min.set("")
+        self.f_max.set("")
+        self.f_verified.set(False)
+        self.f_range.set(_(DATE_RANGES[0][0]))
+
+    @staticmethod
+    def minutes(var):
+        try:
+            return float(var.get().replace(",", "."))
+        except ValueError:
+            return 0.0
+
+    def passes_filters(self, it):
+        dur = it.get("duration") or 0
+        lo, hi = self.minutes(self.f_min), self.minutes(self.f_max)
+        if lo and dur < lo * 60:
+            return False
+        if hi and dur and dur > hi * 60:
+            return False
+        if self.f_verified.get() and not it.get("verified"):
+            return False
+        days = {_(lbl): d for lbl, d in DATE_RANGES}.get(self.f_range.get(), 0)
+        date = it.get("date")
+        if days and date and len(date) == 8:
+            cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+            if date < cutoff:
+                return False
+        return True
+
+    def filters_active(self):
+        return bool(self.minutes(self.f_min) or self.minutes(self.f_max) or self.f_verified.get()
+                    or self.f_range.get() != _(DATE_RANGES[0][0]))
 
     def update_headings(self):
         for key, text, __, ___ in COLUMNS:
@@ -1233,7 +1462,9 @@ class App(tk.Tk):
                     continue
                 if dl and self.hide_downloaded.get():
                     continue
-                if len(rows) - len(kept) >= RESULTS:
+                if not self.passes_filters(it):
+                    continue
+                if len(rows) - len(kept) >= self.limit:
                     continue
             else:
                 kept.append(it["id"])
@@ -1443,7 +1674,8 @@ class App(tk.Tk):
         entry = self.cache["searches"].get(spec["key"])
         if entry and not force and time.time() - entry["at"] < CACHE_TTL:
             self._show(entry["items"], self.token,
-                       _("{l} · aus Cache ({a})").format(l=spec["label"], a=age_text(entry["at"])))
+                       _("{l} · aus Cache ({a})").format(l=spec["label"], a=age_text(entry["at"])),
+                       CHANNEL_POOL if spec["kind"] == "playlist" else RESULTS)
             return
         self.status.set(_("{l} … lädt").format(l=spec["label"]))
         threading.Thread(target=self._search, args=(spec, self.token), daemon=True).start()
@@ -1452,7 +1684,7 @@ class App(tk.Tk):
         try:
             opts = {"quiet": True, "no_warnings": True, "extract_flat": True,
                     "logger": QuietLogger()}
-            if spec["kind"] == "channel":
+            if spec["kind"] in ("channel", "playlist"):
                 opts["playlistend"] = CHANNEL_POOL
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(spec["url"], download=False)
@@ -1462,13 +1694,15 @@ class App(tk.Tk):
             for e in entries:
                 if not e or not e.get("id"):
                     continue
-                n = normalize(e, info if spec["kind"] == "channel" else None)
+                n = normalize(e, info if spec["kind"] in ("channel", "playlist") else None)
                 if terms and not all(t in n["title"].lower() for t in terms):
                     continue
                 items.append(n)
         except Exception as err:
             log("SEARCH FAIL", f"{spec['key']} | {short_err(err, 200)}")
             self.set_status(_("Fehler bei der Suche: {e}").format(e=short_err(err)))
+            if is_bot_error(err):
+                self.after(0, self.offer_cookies)
             return
         self.after(0, lambda: self._finish_search(spec, items, token))
 
@@ -1477,11 +1711,13 @@ class App(tk.Tk):
             self.cache["searches"][spec["key"]] = {"at": time.time(), "items": items}
             self.save_cache()
         if token == self.token:
-            self._show(items, token, _("{l} · frisch geladen").format(l=spec["label"]))
+            self._show(items, token, _("{l} · frisch geladen").format(l=spec["label"]),
+                       CHANNEL_POOL if spec["kind"] == "playlist" else RESULTS)
 
-    def _show(self, raw_items, token, note):
+    def _show(self, raw_items, token, note, limit=RESULTS):
         if token != self.token:
             return
+        self.limit = limit
         self.items = []
         seen = set()
         for n in raw_items:
@@ -1569,6 +1805,7 @@ class App(tk.Tk):
         if self.date_abort:
             self.status.set(_("YouTube verlangt einen Bot-Check. Wähle unten einen Browser bei "
                               "'Cookies aus Browser' (Datum bleibt bis dahin leer)."))
+            self.offer_cookies()
         elif self.date_done >= self.date_total:
             if self.cache_dirty:
                 self.save_cache()
@@ -1577,7 +1814,7 @@ class App(tk.Tk):
                     n=self.date_fail, r=self.date_last_err or _("unbekannt (siehe Log)")))
             else:
                 self.status.set(_("{n} Treffer sichtbar. Datum vollständig geladen.").format(n=len(self.shown)))
-            if self.sort_col == "datum":
+            if self.sort_col == "datum" or self.filters_active():
                 self.render()
         else:
             self.status.set(_("Lade Upload-Datum … {d}/{t}").format(d=self.date_done, t=self.date_total))
@@ -1612,6 +1849,9 @@ class App(tk.Tk):
         v_chap = tk.BooleanVar(value=bool(f["chapters"]))
         v_fold = tk.BooleanVar(value=bool(f["channel_folder"]))
         v_def = tk.BooleanVar(value=False)
+        v_embed = tk.BooleanVar(value=bool(f["embed"]))
+        v_cut_a = tk.StringVar(value="")
+        v_cut_b = tk.StringVar(value="")
 
         body = ttk.Frame(win, padding=14)
         body.pack(fill="both", expand=True)
@@ -1634,16 +1874,34 @@ class App(tk.Tk):
             row=4, column=0, columnspan=3, sticky="w", pady=3)
         ttk.Checkbutton(body, text=_("Eigener Ordner pro Kanal"), variable=v_fold).grid(
             row=5, column=0, columnspan=3, sticky="w", pady=3)
+        ttk.Checkbutton(body, text=_("Cover und Metadaten einbetten"), variable=v_embed).grid(
+            row=6, column=0, columnspan=3, sticky="w", pady=3)
+        ttk.Label(body, text=_("Ausschnitt (Start – Ende, z.B. 1:20 – 3:45)")).grid(
+            row=7, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        cut = ttk.Frame(body)
+        cut.grid(row=8, column=0, columnspan=3, sticky="w", pady=3)
+        ttk.Entry(cut, textvariable=v_cut_a, width=9).pack(side="left")
+        ttk.Label(cut, text="–").pack(side="left", padx=6)
+        ttk.Entry(cut, textvariable=v_cut_b, width=9).pack(side="left")
         ttk.Checkbutton(body, text=_("Als Standard speichern"), variable=v_def).grid(
-            row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
+            row=9, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
         def go():
             label = v_h.get()
             h = 0 if label == _("Beste") else int(label.rstrip("p"))
+            try:
+                a, b = parse_time(v_cut_a.get()), parse_time(v_cut_b.get())
+                if a is not None and b is not None and b <= a:
+                    raise ValueError("range")
+            except ValueError:
+                messagebox.showerror(_("Ausschnitt"), _("Ungültiger Ausschnitt. Beispiel: 1:20 und 3:45."),
+                                     parent=win)
+                return
             fmt = {"height": h, "subs": v_subs.get(), "sub_langs": v_langs.get().strip() or "de,en",
-                   "chapters": v_chap.get(), "channel_folder": v_fold.get()}
+                   "chapters": v_chap.get(), "channel_folder": v_fold.get(), "embed": v_embed.get(),
+                   "cut_start": a, "cut_end": b}
             if v_def.get():
-                self.fmt = dict(fmt)
+                self.fmt = {**DEFAULT_FMT, **{k: fmt[k] for k in SAVED_FMT_KEYS}}
                 self.mode.set(v_mode.get())
                 self.save()
             win.destroy()
@@ -1656,24 +1914,62 @@ class App(tk.Tk):
         win.bind("<Return>", lambda e: go())
         win.bind("<Escape>", lambda e: win.destroy())
 
-    def enqueue(self, picked, fmt, mode):
+    def mode_label(self, mode):
+        return {"mkv": "MKV", "mp4": "MP4", "audio": _("Audio"), "mp3": "MP3"}.get(mode, mode)
+
+    def describe_download(self, vid):
+        rec = self.downloads.get(vid)
+        if not rec:
+            return _("unbekannt")
+        h = rec.get("height") or 0
+        return self.mode_label(rec.get("mode", "?")) + (f" ≤{h}p" if h else "")
+
+    def enqueue_all(self):
+        items = list(self.shown)
+        if not items:
+            return
+        if len(items) > 20 and not messagebox.askyesno(
+                _("Alle sichtbaren laden"), _("{n} Videos in die Warteschlange legen?").format(n=len(items))):
+            return
+        self.enqueue(items, dict(self.fmt), self.mode.get())
+
+    def enqueue(self, picked, fmt, mode, ask=True):
         active = {j["item"]["id"] for j in self.jobs if j["status"] in ("queued", "running")}
+        picked = [it for it in picked if it["id"] not in active]
+        dups = [it for it in picked if self.is_downloaded(it["id"])]
+        if dups and ask:
+            names = ", ".join(f"{d['title'][:30]} ({self.describe_download(d['id'])})" for d in dups[:3])
+            answer = messagebox.askyesnocancel(
+                _("Bereits geladen"),
+                _("{n} Video(s) wurden schon geladen: {names}\n\nJa = trotzdem laden, Nein = überspringen, "
+                  "Abbrechen = nichts tun.").format(n=len(dups), names=names))
+            if answer is None:
+                return
+            if answer is False:
+                skip = {d["id"] for d in dups}
+                picked = [it for it in picked if it["id"] not in skip]
         base = self.ydl_opts()
+        if self.rate_mb > 0:
+            base["ratelimit"] = int(self.rate_mb * 1048576)
         outdir = str(Path(self.outdir.get()).expanduser())
-        added = 0
         for it in picked:
-            if it["id"] in active:
-                continue
             self.job_seq += 1
             self.jobs.append({"n": self.job_seq, "item": it, "mode": mode, "fmt": dict(fmt),
                               "outdir": outdir, "base": base, "status": "queued", "pct": 0.0,
                               "speed": "", "msg": "", "cancel": False})
-            added += 1
-        if added:
-            log("QUEUE", f"{added} Video(s) hinzugefügt")
+        if picked:
+            log("QUEUE", f"{len(picked)} Video(s) hinzugefügt")
             self.job_event.set()
         self.open_queue()
         self.update_queue_status()
+
+    def in_schedule(self):
+        try:
+            start, end = parse_clock(self.window_start), parse_clock(self.window_end)
+        except ValueError:
+            return True
+        n = datetime.now()
+        return in_window(n.hour * 60 + n.minute, start, end)
 
     def _queue_worker(self):
         while True:
@@ -1684,7 +1980,12 @@ class App(tk.Tk):
                 continue
             while self.paused and not job["cancel"] and job["status"] == "queued":
                 time.sleep(0.3)
-            if job["status"] != "queued":
+            while (self.window_on and not self.in_schedule() and not job["cancel"]
+                   and job["status"] == "queued"):
+                job["msg"] = _("wartet auf Zeitfenster {a}–{b}").format(a=self.window_start, b=self.window_end)
+                time.sleep(5)
+            job["msg"] = ""
+            if job["status"] != "queued" or job["cancel"]:
                 continue
             self.run_job(job)
             self.after(0, self.update_queue_status)
@@ -1704,6 +2005,9 @@ class App(tk.Tk):
                 job["status"], job["pct"], job["msg"] = "done", 100.0, Path(path).name
                 self.history.add(it["id"])
                 self.disk_ids.add(it["id"])
+                self.downloads[it["id"]] = {
+                    "title": it["title"], "channel": it["channel"], "mode": job["mode"],
+                    "height": job["fmt"].get("height", 0), "at": now(), "file": path}
                 log("DOWNLOAD", f"{it['id']} | {it['title']} | {it['channel']} | {path}")
                 self.after(0, self.save)
                 self.after(0, self.render)
@@ -1719,6 +2023,8 @@ class App(tk.Tk):
             else:
                 job["status"], job["msg"] = "failed", short_err(err, 160)
                 log("DOWNLOAD FAIL", f"{it['id']} | {short_err(err, 200)}")
+                if is_bot_error(err):
+                    self.after(0, self.offer_cookies)
 
     def _hook(self, job, d):
         if job["cancel"]:
@@ -1847,6 +2153,76 @@ class App(tk.Tk):
                 if iid not in {str(j["n"]) for j in self.jobs}:
                     self.q_tree.delete(iid)
 
+    def offer_cookies(self):
+        if self.cookie_offered or self.cookies.get() != "keine":
+            return
+        found = detect_browsers()
+        if not found:
+            return
+        self.cookie_offered = True
+        name = found[0]
+        if messagebox.askyesno(
+                _("YouTube verlangt eine Anmeldung"),
+                _("YouTube verlangt einen Bot-Check. {b} ist auf diesem Computer installiert.\n\n"
+                  "Cookies aus {b} verwenden? Du musst dort bei YouTube angemeldet sein.").format(b=name)):
+            self.cookies.set(name)
+            self.on_cookies_changed()
+
+    def open_history(self):
+        if self.h_win and self.h_win.winfo_exists():
+            self.h_win.lift()
+            self.refresh_history()
+            return
+        win = tk.Toplevel(self)
+        win.title(_("Verlauf"))
+        win.geometry("820x420")
+        win.transient(self)
+        self.h_win = win
+        self.theme_window(win)
+        btns = ttk.Frame(win, padding=8)
+        btns.pack(side="bottom", fill="x")
+        ttk.Button(btns, text=_("Datei öffnen"), command=lambda: self.open_history_file(False)).pack(side="left")
+        ttk.Button(btns, text=_("Ordner zeigen"), command=lambda: self.open_history_file(True)).pack(
+            side="left", padx=6)
+        ttk.Button(btns, text=_("Aus Verlauf entfernen"), command=self.remove_history).pack(side="right")
+        cols = ("at", "titel", "kanal", "format")
+        tv = ttk.Treeview(win, columns=cols, show="headings", selectmode="extended")
+        for key, text, w, a in (("at", _("Zeitpunkt"), 140, "w"), ("titel", _("Titel"), 330, "w"),
+                                ("kanal", _("Kanal"), 150, "w"), ("format", _("Format"), 100, "w")):
+            tv.heading(key, text=text)
+            tv.column(key, width=w, anchor=a, stretch=(key == "titel"))
+        tv.pack(fill="both", expand=True, padx=8, pady=(8, 0))
+        tv.bind("<Double-1>", lambda e: self.open_history_file(False))
+        self.h_tree = tv
+        self.apply_theme()
+        self.refresh_history()
+
+    def refresh_history(self):
+        if not (self.h_win and self.h_win.winfo_exists()):
+            return
+        tv = self.h_tree
+        tv.delete(*tv.get_children())
+        for vid, rec in sorted(self.downloads.items(), key=lambda kv: kv[1].get("at", ""), reverse=True):
+            tv.insert("", "end", iid=vid, values=(rec.get("at", "?"), rec.get("title", "?"),
+                                                  rec.get("channel", "?"), self.describe_download(vid)))
+
+    def open_history_file(self, reveal):
+        for vid in self.h_tree.selection()[:1]:
+            f = Path(self.downloads.get(vid, {}).get("file", ""))
+            if f.exists():
+                open_path(f, reveal)
+            else:
+                self.status.set(_("Datei nicht mehr vorhanden: {f}").format(f=f.name))
+
+    def remove_history(self):
+        for vid in self.h_tree.selection():
+            self.downloads.pop(vid, None)
+            self.history.discard(vid)
+            log("UNHISTORY", vid)
+        self.save()
+        self.refresh_history()
+        self.render()
+
     def watch_selected_channel(self):
         picked = self.selected_items()
         if not picked:
@@ -1949,7 +2325,7 @@ class App(tk.Tk):
         threading.Thread(target=self._check_watch, args=(keys, self.ydl_opts()), daemon=True).start()
 
     def _check_watch(self, keys, base):
-        total_new, errors = 0, 0
+        total_new, errors, bot_seen = 0, 0, False
         for n, key in enumerate(keys):
             w = self.watch.get(key)
             if not w:
@@ -1962,6 +2338,7 @@ class App(tk.Tk):
                 errors += 1
                 log("WATCH FAIL", f"{w['url']} | {short_err(err, 200)}")
                 if is_bot_error(err):
+                    bot_seen = True
                     break
                 continue
             seen = set(w["seen"])
@@ -1982,6 +2359,8 @@ class App(tk.Tk):
             self.save()
             self.refresh_watch()
             self.status.set(msg)
+            if bot_seen:
+                self.offer_cookies()
 
         self.after(0, done)
 
