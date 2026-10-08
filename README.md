@@ -33,6 +33,7 @@
 - Sign-in through the cookies of an installed browser
 - Dark mode, quick guide and system check at startup
 - English and German interface
+- One-click yt-dlp update from the quick guide
 
 ## Requirements
 
