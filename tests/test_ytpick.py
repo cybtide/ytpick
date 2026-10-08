@@ -525,6 +525,45 @@ class GuiSmokeTests(unittest.TestCase):
         loader.assert_not_called()
         self.app.cur_spec = None
 
+    def test_queued_videos_are_marked(self):
+        items = self.items()
+        self.show(items)
+        with mock.patch.object(self.app, "open_queue"):
+            self.app.enqueue([items[0]], dict(ytpick.DEFAULT_FMT), "mp3")
+        iid = items[0]["id"]
+        self.assertIn("queued", self.app.tree.item(iid, "tags"))
+        self.assertTrue(self.app.tree.set(iid, "titel").startswith("⏳"))
+        self.assertNotIn("queued", self.app.tree.item(items[1]["id"], "tags"))
+        self.app.jobs[-1]["status"] = "running"
+        self.app.render()
+        self.assertTrue(self.app.tree.set(iid, "titel").startswith("⬇"))
+        self.app.cancel_jobs(all_jobs=True)
+        self.app.jobs[-1]["cancel"] = False
+        self.app.jobs[-1]["status"] = "cancelled"
+        self.app.render()
+        self.assertNotIn("queued", self.app.tree.item(iid, "tags"))
+
+    def test_select_all(self):
+        self.show(self.items())
+        self.assertEqual(self.app.select_all(), "break")
+        self.assertEqual(set(self.app.tree.selection()), set(self.app.tree.get_children()))
+
+    def test_keyboard_selection(self):
+        self.show(self.items())
+        ids = list(self.app.tree.get_children())
+        self.assertGreaterEqual(len(ids), 3)
+        self.app.key_nav(1, False)
+        self.assertEqual(self.app.tree.selection(), (ids[0],))
+        self.app.key_nav(1, True)
+        self.app.key_nav(1, True)
+        self.assertEqual(self.app.tree.selection(), tuple(ids[:3]))
+        self.app.key_nav(-1, True)
+        self.assertEqual(self.app.tree.selection(), tuple(ids[:2]))
+        self.app.key_nav(0, False, -1)
+        self.assertEqual(self.app.tree.selection(), (ids[-1],))
+        self.app.key_nav(0, True, 0)
+        self.assertEqual(self.app.tree.selection(), tuple(ids))
+
     def test_rate_limit_applied(self):
         self.show(self.items())
         self.app.paused = True

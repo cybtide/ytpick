@@ -115,7 +115,9 @@ python ytpick.py
 | --- | --- |
 | Search from cache | Enter |
 | Search without cache | Shift + Enter or the *No cache* button |
-| Select several videos | Ctrl or Shift |
+| Select several videos | Ctrl or Shift + click, Shift + arrow keys, Ctrl + A for all |
+| Move in the list | Arrow keys, Home, End, Page up/down; Down arrow in the search box jumps into the list |
+| Focus the search box | Ctrl + F |
 | Hide a video | Del |
 | Pin a video | Space or click on the star |
 | Context menu | Right click |

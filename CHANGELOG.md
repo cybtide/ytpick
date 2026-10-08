@@ -5,6 +5,11 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 
 ## [Unveröffentlicht]
 
+### Hinzugefügt
+
+- Videos in der Warteschlange sind in der Trefferliste markiert (⏳ wartet, ⬇ lädt), damit man sie nicht erneut anklickt
+- Tastatur: Strg+A markiert alle, Pfeiltasten und Umschalt+Pfeiltasten wählen aus, auch Pos1, Ende und Bild auf/ab; Pfeil nach unten im Suchfeld springt in die Liste, Strg+F aktiviert das Suchfeld
+
 ## [0.4.0] - 2026-10-08
 
 ### Hinzugefügt

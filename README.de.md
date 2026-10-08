@@ -115,7 +115,9 @@ python ytpick.py
 | --- | --- |
 | Suche aus dem Cache | Enter |
 | Suche ohne Cache | Umschalt + Enter oder Schaltfläche *Ohne Cache* |
-| Mehrere Videos wählen | Strg- oder Umschalttaste |
+| Mehrere Videos wählen | Strg- oder Umschalttaste + Klick, Umschalt + Pfeiltasten, Strg + A für alle |
+| In der Liste bewegen | Pfeiltasten, Pos1, Ende, Bild auf/ab; Pfeil nach unten im Suchfeld springt in die Liste |
+| Suchfeld aktivieren | Strg + F |
 | Video ausblenden | Entf |
 | Video merken | Leertaste oder Klick auf den Stern |
 | Kontextmenü | Rechtsklick |

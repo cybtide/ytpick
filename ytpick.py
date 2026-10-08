@@ -1033,6 +1033,18 @@ class App(tk.Tk):
         sb.pack(side="right", fill="y")
         self.tree.bind("<Double-1>", lambda e: self.do_download())
         self.tree.bind("<Delete>", lambda e: self.toggle_hide())
+        for seq in ("<Control-a>", "<Control-A>", "<Command-a>"):
+            self.tree.bind(seq, self.select_all)
+        self.sel_anchor = None
+        for key, delta in (("Up", -1), ("Down", 1), ("Prior", -10), ("Next", 10)):
+            self.tree.bind(f"<{key}>", lambda e, d=delta: self.key_nav(d, False))
+            self.tree.bind(f"<Shift-{key}>", lambda e, d=delta: self.key_nav(d, True))
+        for key, pos in (("Home", 0), ("End", -1)):
+            self.tree.bind(f"<{key}>", lambda e, p=pos: self.key_nav(0, False, p))
+            self.tree.bind(f"<Shift-{key}>", lambda e, p=pos: self.key_nav(0, True, p))
+        self.tree.bind("<ButtonPress-1>", self.remember_anchor, add="+")
+        self.q.bind("<Down>", self.search_to_list)
+        self.bind("<Control-f>", self.focus_search)
         self.tree.bind("<space>", lambda e: self.toggle_pin() or "break")
         self.tree.bind("<Button-1>", self.on_click, add="+")
         self.tree.bind("<Button-3>", self.on_context)
@@ -1210,6 +1222,7 @@ class App(tk.Tk):
 
         self.tree.tag_configure("downloaded", foreground=p["dl"])
         self.tree.tag_configure("hidden", foreground=p["hid"])
+        self.tree.tag_configure("queued", foreground=p["accent"])
         for menu in (self.ctx, self.tool_menu):
             menu.configure(bg=p["panel"], fg=p["fg"], activebackground=p["sel"],
                            activeforeground="#ffffff", bd=0)
@@ -1716,6 +1729,52 @@ class App(tk.Tk):
                 return False
         return True
 
+    def remember_anchor(self, event):
+        if event.state & 0x0001:
+            return
+        row = self.tree.identify_row(event.y)
+        if row:
+            self.sel_anchor = row
+
+    def search_to_list(self, event=None):
+        if not self.tree.get_children():
+            return None
+        self.tree.focus_set()
+        return self.key_nav(1, False)
+
+    def focus_search(self, event=None):
+        self.q.focus_set()
+        self.q.selection_range(0, "end")
+        return "break"
+
+    def key_nav(self, delta, extend, absolute=None):
+        ids = list(self.tree.get_children())
+        if not ids:
+            return "break"
+        cur = self.tree.focus() if self.tree.focus() in ids else None
+        if absolute is not None:
+            idx = 0 if absolute == 0 else len(ids) - 1
+        elif cur is None:
+            idx = 0 if delta > 0 else len(ids) - 1
+        else:
+            idx = max(0, min(len(ids) - 1, ids.index(cur) + delta))
+        target = ids[idx]
+        if extend:
+            anchor = self.sel_anchor if self.sel_anchor in ids else (cur or target)
+            lo, hi = sorted((ids.index(anchor), idx))
+            self.tree.selection_set(ids[lo:hi + 1])
+            self.sel_anchor = anchor
+        else:
+            self.tree.selection_set(target)
+            self.sel_anchor = target
+        self.tree.focus(target)
+        self.tree.see(target)
+        return "break"
+
+    def select_all(self, event=None):
+        self.tree.selection_set(self.tree.get_children())
+        return "break"
+
     def show_more(self):
         if not self.items:
             return
@@ -1801,6 +1860,7 @@ class App(tk.Tk):
     def render(self):
         selected = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
+        pending = {j["item"]["id"]: j["status"] for j in self.jobs if j["status"] in ("queued", "running")}
         rows = []
         kept = []
         for it in self.items:
@@ -1824,11 +1884,15 @@ class App(tk.Tk):
         rows.sort(key=lambda r: not self.in_view(r[0]["id"]))
         for it, hid, blk, dl in rows:
             tags = []
+            state = pending.get(it["id"])
             if hid or blk:
                 tags.append("hidden")
-            if dl:
+            if dl and not state:
                 tags.append("downloaded")
-            prefix = ("⊘ " if (hid or blk) else "") + ("✓ " if dl else "")
+            if state:
+                tags.append("queued")
+            prefix = (("⊘ " if (hid or blk) else "") + ("✓ " if dl else "")
+                      + {"queued": "⏳ ", "running": "⬇ "}.get(state, ""))
             extra = {}
             if self.show_thumbs.get():
                 extra["image"] = self.thumbs.get(it["id"], self.blank_image())
@@ -2324,6 +2388,7 @@ class App(tk.Tk):
             self.job_event.set()
         if self.open_queue_on_add:
             self.open_queue()
+        self.render()
         self.update_queue_status()
 
     def in_schedule(self):
@@ -2351,6 +2416,7 @@ class App(tk.Tk):
             if job["status"] != "queued" or job["cancel"]:
                 continue
             self.run_job(job)
+            self.after(0, self.render)
             self.after(0, self.update_queue_status)
             self.after(0, self.on_queue_finished)
 
@@ -2358,6 +2424,7 @@ class App(tk.Tk):
         it = job["item"]
         outdir = Path(job["outdir"])
         job["status"] = "running"
+        self.after(0, self.render)
         try:
             outdir.mkdir(parents=True, exist_ok=True)
             opts = download_opts(job["base"], outdir, job["mode"], job["fmt"],
@@ -2512,6 +2579,7 @@ class App(tk.Tk):
                 j["status"] = "cancelled"
             elif j["status"] == "running":
                 j["cancel"] = True
+        self.render()
         self.update_queue_status()
 
     def clear_finished(self):
